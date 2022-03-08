@@ -3,9 +3,13 @@ from itertools import groupby
 import streamlit as st
 from pyspark.sql import SparkSession
 from pyspark.dbutils import DBUtils
+from databricks_cli.sdk.api_client import ApiClient
+from databricks_cli.dbfs.cli import DbfsApi
+from databricks_cli.dbfs.dbfs_path import DbfsPath
 import datetime
 import json
 
+DBFS_SHARED_DIR = "dbfs://FileStore/tables/summarization"
 DATABRICKS_S3_DIR   = "s3://usw2-sfdc-ecp-prod-databricks-users"
 DATABRICKS_TEMP_DIRS = [
     "databricks_2051_ai-prod-00Dd0000000eekuEAA/20220202_20220304",
@@ -109,3 +113,15 @@ def load_metadata():
         for f in chat_files
         if 'part-' in f.path
     ]).flatMap(databricks_funcs.read_chats_metadata).collect()
+
+def upload_file_to_shared_dir(file, subdir="", overwrite=False):
+    spark = _get_spark()
+    api_client = ApiClient(
+        host=spark.conf.get("spark.databricks.service.address"),
+        token=spark.conf.get("spark.databricks.service.token")
+    )
+    DbfsApi(api_client).put_file(
+        file,
+        DbfsPath(f"{DBFS_SHARED_DIR}/{subdir}", False),
+        overwrite
+    )
