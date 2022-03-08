@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
-from databricks import load_chats, load_metadata
+from databricks import load_chats, load_metadata, CHATS_TEMP_DIR
 
 DATA_DIR = "data"
 ANNOTATIONS_PATH = f"{DATA_DIR}/saved_annotations.json"
@@ -14,7 +14,9 @@ if not os.path.exists(DATA_DIR):
 @st.cache
 def get_metadata():
     if os.path.exists(METADATA_PATH):
-        return pd.read_csv(METADATA_PATH)
+        chat_metadata_df = pd.read_csv(METADATA_PATH)
+        if chat_metadata_df.loc[0, "chat_file"].startswith(CHATS_TEMP_DIR):
+           return chat_metadata_df
 
     chat_metadata_df = pd.DataFrame(load_metadata())
     chat_metadata_df.to_csv(METADATA_PATH, index=False)
@@ -24,7 +26,7 @@ def get_metadata():
 def get_dummy_chats():
     return [
         {"uid": str(cidx),
-         "chat_text": "\n".join(f"Hello, this is sent #{idx}" for idx in range(cidx + 5))}
+         "chat_text": "\n".join(f"Hello, this is turn #{idx}" for idx in range(cidx + 5))}
         for cidx in range(5)
     ]
 
@@ -77,7 +79,8 @@ def show_chat(chat):
     st.button(
         "Clear Annotations",
         key="clear_anns_top",
-        on_click=clear_annotations, args=(chat["uid"],)
+        on_click=clear_annotations,
+        args=(chat["uid"],)
     )
     if chat["uid"] not in st.session_state.annotations:
         st.session_state.annotations[chat["uid"]] = {}
@@ -99,7 +102,8 @@ def show_chat(chat):
     st.button(
         "Clear Annotations",
         key="clear_anns_bottom",
-        on_click=clear_annotations, args=(chat["uid"],)
+        on_click=clear_annotations,
+        args=(chat["uid"],)
     )
 
 load_annotations()
