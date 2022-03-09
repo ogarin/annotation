@@ -115,7 +115,7 @@ def _process_raw_lct(tenant_name):
     ).map(json.dumps).saveAsTextFile(chat_temp_dir)
 
 
-def load_metadata(tenant_name, batch_name):
+def load_metadata(tenant_name):
     chat_temp_dir = get_tenant_temp_dir(tenant_name)
     chat_files = _safe_ls(chat_temp_dir)
     if chat_files is None:
@@ -196,7 +196,7 @@ def create_batch(tenant_name, batch_name, batch_size, turn_range):
         metadata_for_batch = {
             "name": batch_name,
             "size": batch_size,
-            "create_date": datetime.datetime.now().strftime("%d/-%m-%Y"),
+            "create_date": datetime.datetime.now().strftime("%d-%m-%Y"),
             "created_by": getpass.getuser(),
             "chat_uids": [doc["uid"] for doc in meta_data],
         }

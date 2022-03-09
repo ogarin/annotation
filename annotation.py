@@ -9,7 +9,7 @@ from databricks import (
     load_tenants,
     create_batch,
     get_tenant_temp_dir,
-    fetch_batch_meta
+    fetch_batch_meta,
 )
 
 DATA_DIR = "data"
@@ -56,8 +56,10 @@ def fetch_batch_chats(tenant_name, batch_name):
     metadata = get_metadata(tenant_name, batch_name)
     chats_md = metadata.to_dict("records")
     batch_meta = fetch_batch_meta(tenant_name, batch_name)
-    chats_md_filterd = [chat for chat in chats_md if chat['uid'] in batch_meta['chat_uids']]
-    return load_chats(chats_md_filterd)
+    chats_md_filterd = [
+        chat for chat in chats_md if chat["uid"] in batch_meta["chat_uids"]
+    ]
+    return {"chats": load_chats(chats_md_filterd), "batch_meta": batch_meta}
 
 
 def load_annotations():
@@ -139,14 +141,15 @@ def render_sidebar():
 
 
 def render_annotation_window(selected_tenant, selected_batch):
-    chats = fetch_batch_chats(selected_tenant, selected_batch)
-    dataset_size = len(chats)
+    batch = fetch_batch_chats(selected_tenant, selected_batch)
+    dataset_size = len(batch['chats'])
+    st.header(f'Batch: {batch["batch_meta"]["name"]} Created: {batch["batch_meta"]["create_date"]}')
     selected_idx = st.number_input(
         f"Index:", value=0, min_value=0, max_value=dataset_size - 1
     )
     if selected_idx is not None:
         with st.container():
-            render_chat(chats[selected_idx])
+            render_chat(batch['chats'][selected_idx])
 
 
 load_annotations()
