@@ -19,7 +19,7 @@ if not os.path.exists(DATA_DIR):
     os.mkdir(DATA_DIR)
 
 
-def _meta_data_path(tenant_name, batch_name):
+def _meta_data_path(tenant_name):
     return f"{DATA_DIR}/{tenant_name}_metadata.csv"
 
 
@@ -53,7 +53,7 @@ def get_dummy_chats():
 
 @st.cache
 def fetch_batch_chats(tenant_name, batch_name):
-    metadata = get_metadata(tenant_name, batch_name)
+    metadata = get_metadata(tenant_name)
     chats_md = metadata.to_dict("records")
     batch_meta = fetch_batch_meta(tenant_name, batch_name)
     chats_md_filterd = [
