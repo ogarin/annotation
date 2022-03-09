@@ -114,18 +114,26 @@ def _process_raw_lct(tenant_name):
     ).map(json.dumps).saveAsTextFile(chat_temp_dir)
 
 
-def load_metadata(tenant_name):
-    chat_temp_dir = get_tenant_temp_dir(tenant_name)
-    chat_files = _safe_ls(chat_temp_dir)
-    if chat_files is None:
-        _process_raw_lct(tenant_name)
-        chat_files = _safe_ls(chat_temp_dir)
+def load_metadata(tenant_name, batch_name):
+    batch_path = _get_batch_path(tenant_name, batch_name)
+    api_client = _get_dbfs_api_client()
+    with tempfile.TemporaryDirectory() as td:
+        tfpath = f'{td}/{batch_name}'
+        api_client.get_file(batch_path, tfpath, True)
+        with open(tfpath, 'r') as tf:
+            return [json.loads(line) for line in tf]
 
-    return (
-        _parallelize([f.path for f in chat_files if "part-" in f.path])
-        .flatMap(databricks_funcs.read_chats_metadata)
-        .collect()
-    )
+    # chat_temp_dir = get_tenant_temp_dir(tenant_name)
+    # chat_files = _safe_ls(chat_temp_dir)
+    # if chat_files is None:
+    #     _process_raw_lct(tenant_name)
+    #     chat_files = _safe_ls(chat_temp_dir)
+    #
+    # return (
+    #     _parallelize([f.path for f in chat_files if "part-" in f.path])
+    #     .flatMap(databricks_funcs.read_chats_metadata)
+    #     .collect()
+    # )
 
 
 def _get_dbfs_api_client():
@@ -164,6 +172,9 @@ def load_batch(tenant_name):
 def create_batch(tenant_name, batch_name, batch_size, turn_range):
     chat_temp_dir = get_tenant_temp_dir(tenant_name)
     chat_files = _safe_ls(chat_temp_dir)
+    if chat_files is None:
+        _process_raw_lct(tenant_name)
+        chat_files = _safe_ls(chat_temp_dir)
     chat_meta_rdd = (
         _parallelize([f.path for f in chat_files if "part-" in f.path])
         .flatMap(databricks_funcs.read_chats_metadata)

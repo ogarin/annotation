@@ -8,26 +8,32 @@ from databricks import (
     load_batch,
     load_tenants,
     create_batch,
-    get_tenant_temp_dir
+    get_tenant_temp_dir,
 )
 
 DATA_DIR = "data"
 ANNOTATIONS_PATH = f"{DATA_DIR}/saved_annotations.json"
-METADATA_PATH = f"{DATA_DIR}/chat_metadata.csv"
 
 if not os.path.exists(DATA_DIR):
     os.mkdir(DATA_DIR)
 
 
+def _meta_data_path(tenant_name, batch_name):
+    return f"{DATA_DIR}/{tenant_name}_{batch_name}_metadata.csv"
+
+
 @st.cache
-def get_metadata(tenant_name):
-    if os.path.exists(METADATA_PATH):
-        chat_metadata_df = pd.read_csv(METADATA_PATH)
-        if chat_metadata_df.loc[0, "chat_file"].startswith(get_tenant_temp_dir(tenant_name)):
+def get_metadata(tenant_name, batch_name):
+    metadata_path = _meta_data_path(tenant_name, batch_name)
+    if os.path.exists(metadata_path):
+        chat_metadata_df = pd.read_csv(metadata_path)
+        if chat_metadata_df.loc[0, "chat_file"].startswith(
+            get_tenant_temp_dir(tenant_name)
+        ):
             return chat_metadata_df
 
-    chat_metadata_df = pd.DataFrame(load_metadata(tenant_name))
-    chat_metadata_df.to_csv(METADATA_PATH, index=False)
+    chat_metadata_df = pd.DataFrame(load_metadata(tenant_name, batch_name))
+    chat_metadata_df.to_csv(metadata_path, index=False)
     return chat_metadata_df
 
 
@@ -45,9 +51,9 @@ def get_dummy_chats():
 
 
 @st.cache
-def get_some_real_chats(tenant_name, batch_name):
-    metadata = get_metadata(tenant_name)
-    chats_md = metadata[metadata.n_turns.between(10, 30)].head(10).to_dict("records")
+def fetch_batch_chats(tenant_name, batch_name):
+    metadata = get_metadata(tenant_name, batch_name)
+    chats_md = metadata.head(10).to_dict("records")
     return load_chats(chats_md)
 
 
@@ -130,7 +136,7 @@ def render_sidebar():
 
 
 def render_annotation_window(selected_tenant, selected_batch):
-    chats = get_some_real_chats(selected_tenant, selected_batch)
+    chats = fetch_batch_chats(selected_tenant, selected_batch)
     dataset_size = len(chats)
     selected_idx = st.number_input(
         f"Index:", value=0, min_value=0, max_value=dataset_size - 1
