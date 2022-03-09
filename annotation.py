@@ -112,7 +112,8 @@ def render_create_new_batch(
     batch_size = st.number_input("Batch Size", value=50)
     turn_range = st.slider("Turn Range:", value=(5, 10))
     if st.button("Create"):
-        create_batch(selected_tenant, new_batch_name, batch_size, turn_range)
+        with st.spinner(f"Creating Batch {new_batch_name}, Please wait..."):
+            create_batch(selected_tenant, new_batch_name, batch_size, turn_range)
 
 
 def render_sidebar():

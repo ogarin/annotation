@@ -158,7 +158,7 @@ def load_batch(tenant_name):
     if not api_client.file_exists(base_path):
         api_client.mkdirs(base_path)
     batchs = api_client.list_files(base_path)
-    return batchs
+    return [b.dbfs_path.basename for b in batchs]
 
 
 def create_batch(tenant_name, batch_name, batch_size, turn_range):
@@ -168,17 +168,19 @@ def create_batch(tenant_name, batch_name, batch_size, turn_range):
         _parallelize([f.path for f in chat_files if "part-" in f.path])
         .flatMap(databricks_funcs.read_chats_metadata)
         .filter(
-            lambda doc: doc["n_turn"] > turn_range[0] and doc["n_turn"] < turn_range[1]
+            lambda doc: doc["n_turns"] > turn_range[0] and doc["n_turns"] < turn_range[1]
         )
     )
     n = chat_meta_rdd.count()
-    meta_data = chat_meta_rdd.sample(batch_size * 2 / n).collect()
+    meta_data = chat_meta_rdd.sample(False, float(batch_size * 2.0 / n)).collect()[batch_size:]
 
-    with tempfile.NamedTemporaryFile() as tf:
-        for meta_doc in meta_data:
-            tf.write(json.dumps(meta_doc))
-            tf.write("\n")
-        tf.close()
+    with tempfile.TemporaryDirectory() as tdir:
+        tfname = f'{tdir}/{batch_name}'
+        with open(tfname, 'w') as tf:
+            for meta_doc in meta_data:
+                tf.write(json.dumps(meta_doc))
+                tf.write("\n")
+
         _get_dbfs_api_client().put_file(
-            tf.name, _get_batch_path(tenant_name, batch_name)
+            tfname, _get_batch_path(tenant_name, batch_name), True
         )
