@@ -1,3 +1,4 @@
+import getpass
 import tempfile
 
 import databricks_funcs
@@ -115,25 +116,27 @@ def _process_raw_lct(tenant_name):
 
 
 def load_metadata(tenant_name, batch_name):
+    chat_temp_dir = get_tenant_temp_dir(tenant_name)
+    chat_files = _safe_ls(chat_temp_dir)
+    if chat_files is None:
+        _process_raw_lct(tenant_name)
+        chat_files = _safe_ls(chat_temp_dir)
+
+    return (
+        _parallelize([f.path for f in chat_files if "part-" in f.path])
+        .flatMap(databricks_funcs.read_chats_metadata)
+        .collect()
+    )
+
+
+def fetch_batch_meta(tenant_name, batch_name):
     batch_path = _get_batch_path(tenant_name, batch_name)
     api_client = _get_dbfs_api_client()
     with tempfile.TemporaryDirectory() as td:
-        tfpath = f'{td}/{batch_name}'
+        tfpath = f"{td}/{batch_name}"
         api_client.get_file(batch_path, tfpath, True)
-        with open(tfpath, 'r') as tf:
-            return [json.loads(line) for line in tf]
-
-    # chat_temp_dir = get_tenant_temp_dir(tenant_name)
-    # chat_files = _safe_ls(chat_temp_dir)
-    # if chat_files is None:
-    #     _process_raw_lct(tenant_name)
-    #     chat_files = _safe_ls(chat_temp_dir)
-    #
-    # return (
-    #     _parallelize([f.path for f in chat_files if "part-" in f.path])
-    #     .flatMap(databricks_funcs.read_chats_metadata)
-    #     .collect()
-    # )
+        with open(tfpath, "r") as tf:
+            return json.load(tf)
 
 
 def _get_dbfs_api_client():
@@ -179,18 +182,26 @@ def create_batch(tenant_name, batch_name, batch_size, turn_range):
         _parallelize([f.path for f in chat_files if "part-" in f.path])
         .flatMap(databricks_funcs.read_chats_metadata)
         .filter(
-            lambda doc: doc["n_turns"] > turn_range[0] and doc["n_turns"] < turn_range[1]
+            lambda doc: doc["n_turns"] > turn_range[0]
+            and doc["n_turns"] < turn_range[1]
         )
     )
     n = chat_meta_rdd.count()
-    meta_data = chat_meta_rdd.sample(False, float(batch_size * 2.0 / n)).collect()[batch_size:]
+    meta_data = chat_meta_rdd.sample(False, float(batch_size * 2.0 / n)).collect()[
+        :batch_size
+    ]
 
     with tempfile.TemporaryDirectory() as tdir:
-        tfname = f'{tdir}/{batch_name}'
-        with open(tfname, 'w') as tf:
-            for meta_doc in meta_data:
-                tf.write(json.dumps(meta_doc))
-                tf.write("\n")
+        tfname = f"{tdir}/{batch_name}"
+        metadata_for_batch = {
+            "name": batch_name,
+            "size": batch_size,
+            "create_date": datetime.datetime.now().strftime("%d/-%m-%Y"),
+            "created_by": getpass.getuser(),
+            "chat_uids": [doc["uid"] for doc in meta_data],
+        }
+        with open(tfname, "w") as tf:
+            json.dump(metadata_for_batch, tf)
 
         _get_dbfs_api_client().put_file(
             tfname, _get_batch_path(tenant_name, batch_name), True

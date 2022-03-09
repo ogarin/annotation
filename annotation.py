@@ -9,6 +9,7 @@ from databricks import (
     load_tenants,
     create_batch,
     get_tenant_temp_dir,
+    fetch_batch_meta
 )
 
 DATA_DIR = "data"
@@ -19,12 +20,12 @@ if not os.path.exists(DATA_DIR):
 
 
 def _meta_data_path(tenant_name, batch_name):
-    return f"{DATA_DIR}/{tenant_name}_{batch_name}_metadata.csv"
+    return f"{DATA_DIR}/{tenant_name}_metadata.csv"
 
 
 @st.cache
-def get_metadata(tenant_name, batch_name):
-    metadata_path = _meta_data_path(tenant_name, batch_name)
+def get_metadata(tenant_name):
+    metadata_path = _meta_data_path(tenant_name)
     if os.path.exists(metadata_path):
         chat_metadata_df = pd.read_csv(metadata_path)
         if chat_metadata_df.loc[0, "chat_file"].startswith(
@@ -32,7 +33,7 @@ def get_metadata(tenant_name, batch_name):
         ):
             return chat_metadata_df
 
-    chat_metadata_df = pd.DataFrame(load_metadata(tenant_name, batch_name))
+    chat_metadata_df = pd.DataFrame(load_metadata(tenant_name))
     chat_metadata_df.to_csv(metadata_path, index=False)
     return chat_metadata_df
 
@@ -53,8 +54,10 @@ def get_dummy_chats():
 @st.cache
 def fetch_batch_chats(tenant_name, batch_name):
     metadata = get_metadata(tenant_name, batch_name)
-    chats_md = metadata.head(10).to_dict("records")
-    return load_chats(chats_md)
+    chats_md = metadata.to_dict("records")
+    batch_meta = fetch_batch_meta(tenant_name, batch_name)
+    chats_md_filterd = [chat for chat in chats_md if chat['uid'] in batch_meta['chat_uids']]
+    return load_chats(chats_md_filterd)
 
 
 def load_annotations():
