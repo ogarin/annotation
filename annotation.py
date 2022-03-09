@@ -5,10 +5,10 @@ import os
 from databricks import (
     load_chats,
     load_metadata,
-    CHATS_TEMP_DIR,
     load_batch,
     load_tenants,
     create_batch,
+    get_tenant_temp_dir
 )
 
 DATA_DIR = "data"
@@ -20,13 +20,13 @@ if not os.path.exists(DATA_DIR):
 
 
 @st.cache
-def get_metadata():
+def get_metadata(tenant_name):
     if os.path.exists(METADATA_PATH):
         chat_metadata_df = pd.read_csv(METADATA_PATH)
-        if chat_metadata_df.loc[0, "chat_file"].startswith(CHATS_TEMP_DIR):
+        if chat_metadata_df.loc[0, "chat_file"].startswith(get_tenant_temp_dir(tenant_name)):
             return chat_metadata_df
 
-    chat_metadata_df = pd.DataFrame(load_metadata())
+    chat_metadata_df = pd.DataFrame(load_metadata(tenant_name))
     chat_metadata_df.to_csv(METADATA_PATH, index=False)
     return chat_metadata_df
 
@@ -46,26 +46,9 @@ def get_dummy_chats():
 
 @st.cache
 def get_some_real_chats(tenant_name, batch_name):
-    metadata = get_metadata()
+    metadata = get_metadata(tenant_name)
     chats_md = metadata[metadata.n_turns.between(10, 30)].head(10).to_dict("records")
     return load_chats(chats_md)
-
-
-# min_turns = st.sidebar.slider(0
-#     "Min Turns:",
-#     min_value=1,
-#     max_value=100,
-#     step=1,
-#     value=10,
-# )
-#
-# max_turns = st.sidebar.slider(
-#     "Max Turns:",
-#     min_value=1,
-#     max_value=100,
-#     step=1,
-#     value=50,
-# )
 
 
 def load_annotations():
@@ -122,15 +105,22 @@ def render_chat(chat):
     )
 
 
+def render_create_new_batch(
+    selected_tenant,
+):
+    new_batch_name = st.text_input("Batch Name")
+    batch_size = st.number_input("Batch Size", value=50)
+    turn_range = st.slider("Turn Range:", value=(5, 10))
+    if st.button("Create"):
+        create_batch(selected_tenant, new_batch_name, batch_size, turn_range)
+
+
 def render_sidebar():
     tenants = load_tenants()
     selected_tenant = st.sidebar.selectbox("Pick Tenant", tenants)
 
     with st.sidebar.expander("Create New Batch"):
-        new_batch_name = st.text_input("Batch Name")
-        batch_size = st.number_input("Batch Size")
-        if st.button("Create"):
-            create_batch(selected_tenant, new_batch_name, batch_size)
+        render_create_new_batch(selected_tenant)
 
     batchs = load_batch(selected_tenant)
     st.sidebar.header("Batches")
@@ -152,4 +142,3 @@ def render_annotation_window(selected_tenant, selected_batch):
 load_annotations()
 selected_tenant, selected_batch = render_sidebar()
 render_annotation_window(selected_tenant, selected_batch)
-
