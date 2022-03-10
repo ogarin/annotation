@@ -52,9 +52,10 @@ def _get_lct_temp_dir(tenant_name):
 
 
 def _get_spark():
+    getpass.getuser()
     spark = SparkSession.getActiveSession()
     if not spark:
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession.builder.appName(f'Annotation-Tool-{getpass.getuser()}').getOrCreate()
         spark.sparkContext.addPyFile(databricks_funcs.__file__)
 
     return spark
@@ -158,6 +159,13 @@ def _get_batch_path(tenant_name, suffix=""):
     return DbfsPath(f"{DBFS_SHARED_DIR}/{tenant_name}/batchs/{suffix}", False)
 
 
+def get_annotation_path(tenant_name, batch_name, username):
+    return DbfsPath(
+        f"{DBFS_SHARED_DIR}/{tenant_name}/batchs/{batch_name}/annotations/{username}.anno",
+        False,
+    )
+
+
 def load_tenants():
     return list(TENANTS.keys())
 
@@ -206,3 +214,29 @@ def create_batch(tenant_name, batch_name, batch_size, turn_range):
         _get_dbfs_api_client().put_file(
             tfname, _get_batch_path(tenant_name, batch_name), True
         )
+
+
+def upload_annotation(tenant_name, batch_name, annotation):
+    username = getpass.getuser()
+    with tempfile.TemporaryDirectory() as tdir:
+        tfname = f"{tdir}/{tenant_name}_{batch_name}_{username}.anno"
+        with open(tfname, "w") as tfile:
+            json.dump(annotation, tfile)
+
+        _get_dbfs_api_client().put_file(
+            tfname, get_annotation_path(tenant_name, batch_name, username), True
+        )
+
+
+def fetch_annotation(tenant_name, batch_name):
+    try:
+        username = getpass.getuser()
+        anoo_path = get_annotation_path(tenant_name, batch_name, username)
+        api_client = _get_dbfs_api_client()
+        with tempfile.TemporaryDirectory() as td:
+            tfpath = f"{td}/{tenant_name}_{batch_name}_{username}.anno"
+            api_client.get_file(anoo_path, tfpath, True)
+            with open(tfpath, "r") as tf:
+                return json.load(tf)
+    except:
+        return {}
