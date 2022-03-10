@@ -161,21 +161,20 @@ def render_create_new_batch(
 def render_sidebar():
     tenants = load_tenants()
     selected_tenant = st.sidebar.selectbox("Pick Tenant", tenants)
-
+    batchs = load_batch(selected_tenant)
+    selected_batch = st.sidebar.selectbox("Pick Batch", [""] + batchs)
     with st.sidebar.expander("Create New Batch"):
         render_create_new_batch(selected_tenant)
 
-    batchs = load_batch(selected_tenant)
-    st.sidebar.header("Batches")
-    selected_batch = st.sidebar.radio("Pick Batch", batchs)
+    if selected_batch:
+        if st.sidebar.button("Fetch Annotation"):
+            with st.spinner("Fetch Annotation..."):
+                load_annotation_from_remote(selected_tenant, selected_batch)
 
-    if st.sidebar.button("Fetch Annotation"):
-        with st.spinner("Fetch Annotation..."):
-            load_annotation_from_remote(selected_tenant, selected_batch)
+        if st.sidebar.button("Upload Annotation"):
+            with st.spinner("Uploading Annotation..."):
+                upload_annotation_to_remote(selected_tenant, selected_batch)
 
-    if st.sidebar.button("Upload Annotation"):
-        with st.spinner("Uploading Annotation..."):
-            upload_annotation_to_remote(selected_tenant, selected_batch)
     return selected_tenant, selected_batch
 
 
@@ -195,6 +194,8 @@ def render_annotation_window(selected_tenant, selected_batch):
                 render_chat(batch["chats"][selected_idx])
 
 
-selected_tenant, selected_batch = render_sidebar()
-load_annotations(selected_tenant, selected_batch)
-render_annotation_window(selected_tenant, selected_batch)
+if __name__ == "__main__":
+    selected_tenant, selected_batch = render_sidebar()
+    if selected_batch:
+        load_annotations(selected_tenant, selected_batch)
+        render_annotation_window(selected_tenant, selected_batch)

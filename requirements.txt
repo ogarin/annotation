@@ -2,3 +2,17 @@ streamlit==1.0.0
 databricks-connect==9.1.* # must match databricks cluster runtime version
 databricks_cli==0.16.4
 pandas==1.4.0
+
+spacy==3.0.3
+st-annotated-text==1.1.0
+transformers==4.2.2
+torch>=1.7.1,<2.0.0
+bert-score==0.3.7
+rouge-score==0.0.4
+toolz==0.11.1
+nltk==3.4.5
+robustnessgym==0.0.4a0
+torchmetrics==0.5.1
+pytorch-lightning==1.4.5
+sentencepiece==0.1.95
+en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.0.0/en_core_web_lg-3.0.0.tar.gz
