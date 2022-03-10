@@ -13,7 +13,7 @@ from preprocessing import NGramAlignerCap, StaticEmbeddingAlignerCap, \
     BertscoreAlignerCap
 from preprocessing import _spacy_decode, _spacy_encode
 
-from annotation import render_sidebar, fetch_batch_chats
+import annotation
 
 MIN_SEMANTIC_SIM_THRESHOLD = 0.1
 MAX_SEMANTIC_SIM_TOP_K = 10
@@ -249,14 +249,13 @@ if __name__ == "__main__":
     Spacy.decode = _spacy_decode
     rg_spacy = Spacy(nlp=nlp)
 
-
-    selected_tenant, selected_batch = render_sidebar(allow_create_batch=False)
+    selected_batch, selected_tenant = annotation.render_pick_tenant_and_batch()
 
     sidebar_placeholder_from = st.sidebar.empty()
     sidebar_placeholder_to = st.sidebar.empty()
 
     if selected_batch:
-        batch = fetch_batch_chats(selected_tenant, selected_batch)
+        batch = annotation.fetch_batch_chats(selected_tenant, selected_batch)
 
         dataset_size = len(batch['chats'])
         query = st.number_input(f"Index (Size: {dataset_size}):", value=0, min_value=0,

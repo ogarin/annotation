@@ -158,11 +158,16 @@ def render_create_new_batch(
                 create_batch(selected_tenant, new_batch_name, batch_size, turn_range)
 
 
-def render_sidebar():
+def render_pick_tenant_and_batch():
     tenants = load_tenants()
     selected_tenant = st.sidebar.selectbox("Pick Tenant", tenants)
     batchs = load_batch(selected_tenant)
     selected_batch = st.sidebar.selectbox("Pick Batch", [""] + batchs)
+    return selected_batch, selected_tenant
+
+
+def render_sidebar():
+    selected_batch, selected_tenant = render_pick_tenant_and_batch()
     with st.sidebar.expander("Create New Batch"):
         render_create_new_batch(selected_tenant)
 
