@@ -156,12 +156,12 @@ def upload_file_to_shared_dir(file, subdir="", overwrite=False):
 
 
 def _get_batch_path(tenant_name, suffix=""):
-    return DbfsPath(f"{DBFS_SHARED_DIR}/{tenant_name}/batchs/{suffix}", False)
+    return DbfsPath(f"{DBFS_SHARED_DIR}/{tenant_name}/batches/{suffix}", False)
 
 
 def get_annotation_path(tenant_name, batch_name, username):
     return DbfsPath(
-        f"{DBFS_SHARED_DIR}/{tenant_name}/batchs/{batch_name}/annotations/{username}.anno",
+        f"{DBFS_SHARED_DIR}/{tenant_name}/batches/annotations/{batch_name}/{username}.anno",
         False,
     )
 
@@ -169,7 +169,7 @@ def get_annotation_path(tenant_name, batch_name, username):
 def load_tenants():
     return list(TENANTS.keys())
 
-@st.cache
+
 def load_batch(tenant_name):
     base_path = _get_batch_path(tenant_name)
     api_client = _get_dbfs_api_client()
