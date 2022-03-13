@@ -161,7 +161,7 @@ def _get_batch_path(tenant_name, suffix=""):
 
 def get_annotation_path(tenant_name, batch_name, username):
     return DbfsPath(
-        f"{DBFS_SHARED_DIR}/{tenant_name}/batches/annotations/{batch_name}/{username}.anno",
+        f"{DBFS_SHARED_DIR}/{tenant_name}/annotations/batches/{batch_name}/{username}.anno",
         False,
     )
 
