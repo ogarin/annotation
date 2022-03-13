@@ -32,7 +32,6 @@ class Instance():
 
 @st.cache(allow_output_mutation=True)
 def get_models():
-    # with st.spinner(f"Loading..."):
     return OrderedDict([
         (key, transformers.pipeline("summarization", model=name_or_path, framework="pt"))
         for key, name_or_path in [

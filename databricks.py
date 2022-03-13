@@ -169,7 +169,7 @@ def get_annotation_path(tenant_name, batch_name, username):
 def load_tenants():
     return list(TENANTS.keys())
 
-
+@st.cache
 def load_batch(tenant_name):
     base_path = _get_batch_path(tenant_name)
     api_client = _get_dbfs_api_client()
