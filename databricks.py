@@ -170,7 +170,8 @@ def load_tenants():
     return list(TENANTS.keys())
 
 
-def load_batch(tenant_name):
+@st.cache
+def load_batch_names(tenant_name):
     base_path = _get_batch_path(tenant_name)
     api_client = _get_dbfs_api_client()
 

@@ -6,7 +6,7 @@ from functools import partial
 from databricks import (
     load_chats,
     load_metadata,
-    load_batch,
+    load_batch_names,
     load_tenants,
     create_batch,
     get_tenant_temp_dir,
@@ -161,7 +161,7 @@ def render_create_new_batch(
 def render_pick_tenant_and_batch():
     tenants = load_tenants()
     selected_tenant = st.sidebar.selectbox("Pick Tenant", tenants)
-    batchs = load_batch(selected_tenant)
+    batchs = load_batch_names(selected_tenant)
     selected_batch = st.sidebar.selectbox("Pick Batch", [""] + batchs)
     return selected_batch, selected_tenant
 
