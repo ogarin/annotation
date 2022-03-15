@@ -1,16 +1,22 @@
 import getpass
 import tempfile
 
+from common import ANNOTATION_SCHEME_VERSION, get_annotation_local_path
+
 import databricks_funcs
 from itertools import groupby
 import streamlit as st
 from pyspark.sql import SparkSession
 from pyspark.dbutils import DBUtils
 from databricks_cli.sdk.api_client import ApiClient
-from databricks_cli.dbfs.cli import DbfsApi
+import databricks_cli.dbfs.api
+from databricks_cli.dbfs.api import DbfsApi
 from databricks_cli.dbfs.dbfs_path import DbfsPath
 import datetime
 import json
+
+databricks_cli.dbfs.api.error_and_quit = st.error
+databricks_cli.dbfs.api.click.echo = st.info
 
 DBFS_SHARED_DIR = "dbfs:/FileStore/tables/summarization"
 DATABRICKS_S3_DIR = "s3://usw2-sfdc-ecp-prod-databricks-users"
@@ -155,13 +161,19 @@ def upload_file_to_shared_dir(file, subdir="", overwrite=False):
     )
 
 
-def _get_batch_path(tenant_name, suffix=""):
-    return DbfsPath(f"{DBFS_SHARED_DIR}/{tenant_name}/batches/{suffix}", False)
+def _get_batches_path(tenant_name):
+    return DbfsPath(f"{DBFS_SHARED_DIR}/{tenant_name}/batches", False)
 
 
-def get_annotation_path(tenant_name, batch_name, username):
+def _get_batch_path(tenant_name, batch_name):
+    return DbfsPath(f"{DBFS_SHARED_DIR}/{tenant_name}/batches/{batch_name}/batch.json", False)
+
+
+def get_annotation_path(tenant_name, batch_name):
+    username = getpass.getuser()
     return DbfsPath(
-        f"{DBFS_SHARED_DIR}/{tenant_name}/annotations/batches/{batch_name}/{username}.anno",
+        f"{DBFS_SHARED_DIR}/{tenant_name}/batches/{batch_name}/annotations/"
+        f"{ANNOTATION_SCHEME_VERSION}/{username}.anno",
         False,
     )
 
@@ -172,7 +184,7 @@ def load_tenants():
 
 @st.cache
 def load_batch_names(tenant_name):
-    base_path = _get_batch_path(tenant_name)
+    base_path = _get_batches_path(tenant_name)
     api_client = _get_dbfs_api_client()
 
     if not api_client.file_exists(base_path):
@@ -218,26 +230,21 @@ def create_batch(tenant_name, batch_name, batch_size, turn_range):
 
 
 def upload_annotation(tenant_name, batch_name, annotation):
-    username = getpass.getuser()
-    with tempfile.TemporaryDirectory() as tdir:
-        tfname = f"{tdir}/{tenant_name}_{batch_name}_{username}.anno"
-        with open(tfname, "w") as tfile:
-            json.dump(annotation, tfile)
-
-        _get_dbfs_api_client().put_file(
-            tfname, get_annotation_path(tenant_name, batch_name, username), True
-        )
+    local_file = get_annotation_local_path(tenant_name, batch_name)
+    with open(local_file, "w") as tfile:
+        json.dump(annotation, tfile)
+    _get_dbfs_api_client().put_file(
+        local_file, get_annotation_path(tenant_name, batch_name), True
+    )
 
 
 def fetch_annotation(tenant_name, batch_name):
     try:
-        username = getpass.getuser()
-        anoo_path = get_annotation_path(tenant_name, batch_name, username)
-        api_client = _get_dbfs_api_client()
-        with tempfile.TemporaryDirectory() as td:
-            tfpath = f"{td}/{tenant_name}_{batch_name}_{username}.anno"
-            api_client.get_file(anoo_path, tfpath, True)
-            with open(tfpath, "r") as tf:
-                return json.load(tf)
+        anoo_path = get_annotation_path(tenant_name, batch_name)
+        local_file = get_annotation_local_path(tenant_name, batch_name)
+        print(f"get {anoo_path} to {local_file}")
+        _get_dbfs_api_client().get_file(anoo_path, local_file, True)
+        with open(local_file, "r") as tf:
+            return json.load(tf)
     except:
         return {}

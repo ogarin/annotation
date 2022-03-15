@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
-from functools import partial
+from common import DATA_DIR, get_annotation_local_path
 from databricks import (
     load_chats,
     load_metadata,
@@ -14,16 +14,6 @@ from databricks import (
     upload_annotation,
     fetch_annotation,
 )
-
-DATA_DIR = "data"
-
-
-if not os.path.exists(DATA_DIR):
-    os.mkdir(DATA_DIR)
-
-
-def _get_annotation_path(tenant_name, batch_name):
-    return f"{DATA_DIR}/{tenant_name}_{batch_name}.anno"
 
 
 def _meta_data_path(tenant_name):
@@ -73,7 +63,7 @@ def load_annotations(selected_tenant, selected_batch):
     annotation = {}
     try:
         with open(
-            _get_annotation_path(selected_tenant, selected_batch),
+            get_annotation_local_path(selected_tenant, selected_batch),
             "r",
         ) as tfile:
             annotation = json.load(tfile)
@@ -93,7 +83,7 @@ def upload_annotation_to_remote(selected_tenant, selected_batch):
 
 def save_annotations(selected_tenant, selected_batch):
     with open(
-        _get_annotation_path(selected_tenant, selected_batch),
+        get_annotation_local_path(selected_tenant, selected_batch),
         "w",
     ) as tfile:
         return json.dump(st.session_state.annotations, tfile)
@@ -110,6 +100,7 @@ def update_annotation(selected_tenant, selected_batch, annotations, idx, current
 
 
 def render_chat(chat):
+    st.text("Chat: " + chat["uid"])
     st.button(
         "Clear Annotations",
         key="clear_anns_top",
