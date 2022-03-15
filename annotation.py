@@ -19,6 +19,9 @@ from databricks import (
 def _meta_data_path(tenant_name):
     return f"{DATA_DIR}/{tenant_name}_metadata.csv"
 
+def get_annotation_config_path():
+    return f"{DATA_DIR}/annotation_config.json"
+
 
 @st.cache
 def get_metadata(tenant_name):
@@ -60,16 +63,23 @@ def fetch_batch_chats(tenant_name, batch_name):
 
 
 def load_annotations(selected_tenant, selected_batch):
-    annotation = {}
+    annotation_config = {"turn_categories": []}
     try:
-        with open(
-            get_annotation_local_path(selected_tenant, selected_batch),
-            "r",
-        ) as tfile:
-            annotation = json.load(tfile)
+        with open(get_annotation_config_path(), "r") as tfile:
+            annotation_config = json.load(tfile)
     except:
         pass
-    st.session_state["annotations"] = annotation
+    st.session_state["annotation_config"] = annotation_config
+    st.session_state["turn_categories_str"] = ",".join(annotation_config["turn_categories"])
+
+    annotations = {}
+    try:
+        with open(get_annotation_local_path(selected_tenant, selected_batch), "r") as tfile:
+            annotations = json.load(tfile)
+    except:
+        pass
+
+    st.session_state["annotations"] = annotations
 
 
 def load_annotation_from_remote(selected_tenant, selected_batch):
@@ -82,10 +92,7 @@ def upload_annotation_to_remote(selected_tenant, selected_batch):
 
 
 def save_annotations(selected_tenant, selected_batch):
-    with open(
-        get_annotation_local_path(selected_tenant, selected_batch),
-        "w",
-    ) as tfile:
+    with open(get_annotation_local_path(selected_tenant, selected_batch), "w") as tfile:
         return json.dump(st.session_state.annotations, tfile)
 
 
@@ -94,12 +101,29 @@ def clear_sample_annotations(selected_tenant, selected_batch, chat_idx):
     save_annotations(selected_tenant, selected_batch)
 
 
-def update_annotation(selected_tenant, selected_batch, annotations, idx, current_value):
-    annotations[idx] = not current_value
+def update_annotation_config():
+    st.session_state.annotation_config["turn_categories"] = [
+        cat.strip()
+        for cat in st.session_state.turn_categories_str.split(",")
+    ]
+    with open(get_annotation_config_path(), "w") as tfile:
+        return json.dump(st.session_state.annotation_config, tfile)
+
+def update_annotation(selected_tenant, selected_batch, chat_uid, line_idx):
+    st.session_state.annotations[chat_uid][line_idx] = st.session_state[f"turn_label_{line_idx}"]
+    print(st.session_state.annotations[chat_uid])
     save_annotations(selected_tenant, selected_batch)
 
 
 def render_chat(chat):
+    st.markdown(""" <style>
+    [data-testid="stHorizontalBlock"] label {display:none;}
+    [data-testid="stHorizontalBlock"] [data-baseweb="select"] > div > div {
+        padding-bottom:0;
+        padding-top:0;
+    }
+    </style> """, unsafe_allow_html=True)
+
     st.text("Chat: " + chat["uid"])
     st.button(
         "Clear Annotations",
@@ -107,27 +131,32 @@ def render_chat(chat):
         on_click=clear_sample_annotations,
         args=(selected_tenant, selected_batch, chat["uid"]),
     )
+
     if chat["uid"] not in st.session_state.annotations:
-        st.session_state.annotations[chat["uid"]] = {
-            idx: False for idx, _ in enumerate(chat["chat_text"].splitlines())
-        }
+        st.session_state.annotations[chat["uid"]] = {}
+
+    turn_cats = [""] + st.session_state.annotation_config["turn_categories"]
     for lidx, line in enumerate(chat["chat_text"].splitlines()):
         lidx = str(lidx)
-        # col1, col2 = st.columns((1, 20))
-        st.checkbox(
-            line,
-            key=f"radio_{chat['uid']}_{lidx}",
-            value=st.session_state.annotations[chat["uid"]].get(lidx),
-            on_change=update_annotation,
-            args=(
-                selected_tenant,
-                selected_batch,
-                st.session_state.annotations[chat["uid"]],
-                lidx,
-                st.session_state.annotations[chat["uid"]].get(lidx)
-            ),
-        )
-        # col2.write(line)
+
+        col1, col2 = st.columns((1, 4))
+        with col1:
+            st.selectbox(
+                "<LABEL HIDDEN>",
+                key=f"turn_label_{lidx}",
+                index=turn_cats.index(st.session_state.annotations[chat["uid"]].get(lidx, "")),
+                options=turn_cats,
+                on_change=update_annotation,
+                args=(
+                    selected_tenant,
+                    selected_batch,
+                    chat["uid"],
+                    lidx
+                ),
+            )
+
+        with col2:
+            st.markdown(line)
 
     st.button(
         "Clear Annotations",
@@ -181,6 +210,11 @@ def render_annotation_window(selected_tenant, selected_batch):
         dataset_size = len(batch["chats"])
         st.header(
             f'Batch: {batch["batch_meta"]["name"]} Created: {batch["batch_meta"]["create_date"]}'
+        )
+        st.text_input(
+            "Labels (comma separated)",
+            key="turn_categories_str",
+            on_change=update_annotation_config
         )
         selected_idx = st.number_input(
             f"Index:", value=0, min_value=0, max_value=dataset_size - 1

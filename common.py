@@ -1,5 +1,5 @@
 import os
-ANNOTATION_SCHEME_VERSION = "v1"
+ANNOTATION_SCHEME_VERSION = "v2"
 DATA_DIR = "data"
 
 if not os.path.exists(DATA_DIR):
