@@ -63,15 +63,6 @@ def fetch_batch_chats(tenant_name, batch_name):
 
 
 def load_annotations(selected_tenant, selected_batch):
-    annotation_config = {"turn_categories": []}
-    try:
-        with open(get_annotation_config_path(), "r") as tfile:
-            annotation_config = json.load(tfile)
-    except:
-        pass
-    st.session_state["annotation_config"] = annotation_config
-    st.session_state["turn_categories_str"] = ",".join(annotation_config["turn_categories"])
-
     annotations = {}
     try:
         with open(get_annotation_local_path(selected_tenant, selected_batch), "r") as tfile:
@@ -101,29 +92,19 @@ def clear_sample_annotations(selected_tenant, selected_batch, chat_idx):
     save_annotations(selected_tenant, selected_batch)
 
 
-def update_annotation_config():
-    st.session_state.annotation_config["turn_categories"] = [
-        cat.strip()
-        for cat in st.session_state.turn_categories_str.split(",")
-    ]
-    with open(get_annotation_config_path(), "w") as tfile:
-        return json.dump(st.session_state.annotation_config, tfile)
-
 def update_annotation(selected_tenant, selected_batch, chat_uid, line_idx):
-    st.session_state.annotations[chat_uid][line_idx] = st.session_state[f"turn_label_{line_idx}"]
-    print(st.session_state.annotations[chat_uid])
+    if st.session_state[f"radio_{line_idx}"]:
+        st.session_state.annotations[chat_uid][line_idx] = st.session_state.get(
+            f"summary_{line_idx}", ""
+        )
+        if st.session_state.annotations[chat_uid][line_idx]:
+            st.warning("Please implement encryption!!")
+    else:
+        st.session_state.annotations[chat_uid].pop(line_idx, None)
     save_annotations(selected_tenant, selected_batch)
 
 
 def render_chat(chat):
-    st.markdown(""" <style>
-    [data-testid="stHorizontalBlock"] label {display:none;}
-    [data-testid="stHorizontalBlock"] [data-baseweb="select"] > div > div {
-        padding-bottom:0;
-        padding-top:0;
-    }
-    </style> """, unsafe_allow_html=True)
-
     st.text("Chat: " + chat["uid"])
     st.button(
         "Clear Annotations",
@@ -135,17 +116,25 @@ def render_chat(chat):
     if chat["uid"] not in st.session_state.annotations:
         st.session_state.annotations[chat["uid"]] = {}
 
-    turn_cats = [""] + st.session_state.annotation_config["turn_categories"]
     for lidx, line in enumerate(chat["chat_text"].splitlines()):
         lidx = str(lidx)
 
-        col1, col2 = st.columns((1, 4))
-        with col1:
-            st.selectbox(
-                "<LABEL HIDDEN>",
-                key=f"turn_label_{lidx}",
-                index=turn_cats.index(st.session_state.annotations[chat["uid"]].get(lidx, "")),
-                options=turn_cats,
+        if st.checkbox(
+            line,
+            key=f"radio_{lidx}",
+            value=lidx in st.session_state.annotations[chat["uid"]],
+            on_change=update_annotation,
+            args=(
+                    selected_tenant,
+                    selected_batch,
+                    chat["uid"],
+                    lidx
+            ),
+        ):
+            st.text_input(
+                "Next Summary Sentence:",
+                key=f"summary_{lidx}",
+                value=st.session_state.annotations[chat["uid"]].get(lidx, ""),
                 on_change=update_annotation,
                 args=(
                     selected_tenant,
@@ -155,8 +144,6 @@ def render_chat(chat):
                 ),
             )
 
-        with col2:
-            st.markdown(line)
 
     st.button(
         "Clear Annotations",
@@ -210,11 +197,6 @@ def render_annotation_window(selected_tenant, selected_batch):
         dataset_size = len(batch["chats"])
         st.header(
             f'Batch: {batch["batch_meta"]["name"]} Created: {batch["batch_meta"]["create_date"]}'
-        )
-        st.text_input(
-            "Labels (comma separated)",
-            key="turn_categories_str",
-            on_change=update_annotation_config
         )
         selected_idx = st.number_input(
             f"Index:", value=0, min_value=0, max_value=dataset_size - 1
