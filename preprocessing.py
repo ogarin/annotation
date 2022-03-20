@@ -382,7 +382,6 @@ def run_workflow(
         summary_columns=[f'preprocessed_{col}' for col in summary_columns],
     )
 
-    # Save the dataset
     if anonymize:
         # Remove certain columns to anonymize and save to disk
         for col in [doc_column, reference_column]:
@@ -395,6 +394,9 @@ def run_workflow(
                 del dataset.interactions[CACHEDOPS].history[
                     (spacy.identifier, f'preprocessed_{col}')
                 ]
+
+    # Save the dataset
+    if anonymize:
         dataset.save_to_disk(f'{processed_dataset_path}.anonymized')
     else:
         # Directly save to disk

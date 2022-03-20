@@ -192,8 +192,7 @@ def render_sidebar():
 
 def render_annotation_window(selected_tenant, selected_batch):
     with st.container():
-        with st.spinner(f"Loading Samples from batch: {selected_batch}"):
-            batch = fetch_batch_chats(selected_tenant, selected_batch)
+        batch = fetch_batch_chats(selected_tenant, selected_batch)
         dataset_size = len(batch["chats"])
         st.header(
             f'Batch: {batch["batch_meta"]["name"]} Created: {batch["batch_meta"]["create_date"]}'

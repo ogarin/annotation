@@ -36,13 +36,14 @@ TENANTS = {
             "databricks_2051_ai-prod-00Dd0000000eekuEAA/20220930_20221030",
             "databricks_2051_ai-prod-00Dd0000000eekuEAA/20221030_20221129",
         ],
-        "mllake_lct": f"{SNAPSHOT_DIR}/00Dd0000000eekuEAA-LiveChatTranscript-sp_9c412e88-3ce2-4a07-8c9b-f567c625967a/data/ReceivedAt_day=2022-02-02/",
+        "mllake_lct": f"{SNAPSHOT_DIR}/00Dd0000000eekuEAA-LiveChatTranscript-sp_9c412e88-3ce2-4a07-8c9b-f567c625967a/data/ReceivedAt_day=2022-02-02",
+        "mllake_case": f"{SNAPSHOT_DIR}/00Dd0000000eekuEAA-Case-sp_2f8d4c3a-9d97-43f2-98ce-d837f5d44750/data/ReceivedAt_day=2022-02-02",
     }
 }
 
 
 def get_tenant_temp_dir(tenant_name):
-    return f"{DATABRICKS_S3_DIR}/{_get_lct_temp_dir(tenant_name)}/lct_json"
+    return f"{DATABRICKS_S3_DIR}/{_get_lct_temp_dir(tenant_name)}/lct_with_case_json"
 
 
 def _get_lct_temp_dir(tenant_name):
@@ -57,11 +58,14 @@ def _get_lct_temp_dir(tenant_name):
     raise FileNotFoundError()
 
 
+@st.cache(allow_output_mutation=True)
 def _get_spark():
     getpass.getuser()
     spark = SparkSession.getActiveSession()
     if not spark:
-        spark = SparkSession.builder.appName(f'Annotation-Tool-{getpass.getuser()}').getOrCreate()
+        spark = SparkSession.builder.appName(
+            f"Annotation-Tool-{getpass.getuser()}"
+        ).getOrCreate()
         spark.sparkContext.addPyFile(databricks_funcs.__file__)
 
     return spark
@@ -71,6 +75,7 @@ def _get_spark_context():
     return _get_spark().sparkContext
 
 
+@st.cache(allow_output_mutation=True)
 def _get_dbutils():
     return DBUtils(_get_spark())
 
@@ -113,22 +118,44 @@ def _safe_ls(path):
             raise
 
 
-def _process_raw_lct(tenant_name):
+def _process_raw_data(tenant_name):
     chat_temp_dir = get_tenant_temp_dir(tenant_name)
-    mllake_lct = TENANTS[tenant_name]["mllake_lct"]
-    raw_lct_files = _get_dbutils().fs.ls(mllake_lct)
-    _parallelize([f.path for f in raw_lct_files]).flatMap(
-        databricks_funcs.read_raw_lct
-    ).map(json.dumps).saveAsTextFile(chat_temp_dir)
+    raw_lct_files = _get_dbutils().fs.ls(TENANTS[tenant_name]["mllake_lct"])
+    lct_rdd_by_case_id = (
+        _parallelize([f.path for f in raw_lct_files])
+        .flatMap(databricks_funcs.read_raw_lcts)
+        .keyBy(lambda record: record["case_id"])
+    )
+
+    raw_case_files = _get_dbutils().fs.ls(TENANTS[tenant_name]["mllake_case"])
+    case_rdd_by_id = (
+        _parallelize([f.path for f in raw_case_files])
+        .flatMap(databricks_funcs.read_raw_cases)
+        .keyBy(lambda record: record["Id"])
+    )
+
+    lct_rdd_by_case_id.join(case_rdd_by_id).reduceByKey(
+        lambda v1, v2: v1 # drop duplicates :(
+    ).map(
+        lambda id_to_lct_and_chat: dict(
+            id_to_lct_and_chat[1][0], case=id_to_lct_and_chat[1][1]
+        )
+    ).map(
+        lambda obj: json.dumps(obj, default=str)
+    ).saveAsTextFile(chat_temp_dir)
 
 
-def load_metadata(tenant_name):
+def _get_chat_files(tenant_name):
     chat_temp_dir = get_tenant_temp_dir(tenant_name)
     chat_files = _safe_ls(chat_temp_dir)
     if chat_files is None:
-        _process_raw_lct(tenant_name)
+        _process_raw_data(tenant_name)
         chat_files = _safe_ls(chat_temp_dir)
+    return chat_files
 
+
+def load_metadata(tenant_name):
+    chat_files = _get_chat_files(tenant_name)
     return (
         _parallelize([f.path for f in chat_files if "part-" in f.path])
         .flatMap(databricks_funcs.read_chats_metadata)
@@ -166,7 +193,9 @@ def _get_batches_path(tenant_name):
 
 
 def _get_batch_path(tenant_name, batch_name):
-    return DbfsPath(f"{DBFS_SHARED_DIR}/{tenant_name}/batches/{batch_name}/batch.json", False)
+    return DbfsPath(
+        f"{DBFS_SHARED_DIR}/{tenant_name}/batches/{batch_name}/batch.json", False
+    )
 
 
 def get_annotation_path(tenant_name, batch_name):
@@ -194,11 +223,7 @@ def load_batch_names(tenant_name):
 
 
 def create_batch(tenant_name, batch_name, batch_size, turn_range):
-    chat_temp_dir = get_tenant_temp_dir(tenant_name)
-    chat_files = _safe_ls(chat_temp_dir)
-    if chat_files is None:
-        _process_raw_lct(tenant_name)
-        chat_files = _safe_ls(chat_temp_dir)
+    chat_files = _get_chat_files(tenant_name)
     chat_meta_rdd = (
         _parallelize([f.path for f in chat_files if "part-" in f.path])
         .flatMap(databricks_funcs.read_chats_metadata)

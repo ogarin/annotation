@@ -58,8 +58,10 @@ def retrieve(batch, index):
     uid = data["uid"]
 
     dialogue = data["chat_text"]
+    gold_summary = data["case"].get("Description")
+
     document = _to_doc(dialogue, "document", "Document")
-    # reference = _to_doc(gold_summary, "summary:reference", "Reference")
+    reference = None if not gold_summary else _to_doc(gold_summary, "summary:reference", "Reference")
 
     preds = []
     for model_name, model in get_models().items():
@@ -71,7 +73,7 @@ def retrieve(batch, index):
     return Instance(
         id_=uid,
         document=document,
-        reference=None,
+        reference=reference,
         preds=preds,
         data=data,
     )
