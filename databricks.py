@@ -198,10 +198,11 @@ def _get_batch_path(tenant_name, batch_name):
     )
 
 
-def get_annotation_path(tenant_name, batch_name):
+def get_annotation_path(tenant_name, batch_name, annotation_type):
     username = getpass.getuser()
     return DbfsPath(
         f"{DBFS_SHARED_DIR}/{tenant_name}/batches/{batch_name}/annotations/"
+        f"{annotation_type}/"
         f"{ANNOTATION_SCHEME_VERSION}/{username}.anno",
         False,
     )
@@ -254,20 +255,19 @@ def create_batch(tenant_name, batch_name, batch_size, turn_range):
         )
 
 
-def upload_annotation(tenant_name, batch_name, annotation):
-    local_file = get_annotation_local_path(tenant_name, batch_name)
+def upload_annotation(tenant_name, batch_name, annotation_type, annotation):
+    local_file = get_annotation_local_path(tenant_name, batch_name, annotation_type)
     with open(local_file, "w") as tfile:
         json.dump(annotation, tfile)
     _get_dbfs_api_client().put_file(
-        local_file, get_annotation_path(tenant_name, batch_name), True
+        local_file, get_annotation_path(tenant_name, batch_name, annotation_type), True
     )
 
 
-def fetch_annotation(tenant_name, batch_name):
+def fetch_annotation(tenant_name, batch_name, annotation_type):
     try:
-        anoo_path = get_annotation_path(tenant_name, batch_name)
-        local_file = get_annotation_local_path(tenant_name, batch_name)
-        print(f"get {anoo_path} to {local_file}")
+        anoo_path = get_annotation_path(tenant_name, batch_name, annotation_type)
+        local_file = get_annotation_local_path(tenant_name, batch_name, annotation_type)
         _get_dbfs_api_client().get_file(anoo_path, local_file, True)
         with open(local_file, "r") as tf:
             return json.load(tf)
