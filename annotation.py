@@ -14,6 +14,8 @@ from databricks import (
     fetch_batch_meta,
     upload_annotation,
     fetch_annotation,
+    get_saved_batch,
+    save_batch
 )
 
 
@@ -53,15 +55,22 @@ def get_dummy_chats():
     ]
 
 
-@st.cache
+@st.cache(allow_output_mutation=True)
 def fetch_batch_chats(tenant_name, batch_name):
+    batch = get_saved_batch(tenant_name, batch_name)
+    if batch:
+        return batch
+
     metadata = get_metadata(tenant_name)
     chats_md = metadata.to_dict("records")
     batch_meta = fetch_batch_meta(tenant_name, batch_name)
     chats_md_filterd = [
         chat for chat in chats_md if chat["uid"] in batch_meta["chat_uids"]
     ]
-    return {"chats": load_chats(chats_md_filterd), "batch_meta": batch_meta}
+    batch = {"chats": load_chats(chats_md_filterd), "batch_meta": batch_meta}
+    save_batch(tenant_name, batch_name, batch)
+
+    return batch
 
 
 def load_annotations(selected_tenant, selected_batch, annotation_type):
@@ -221,9 +230,9 @@ def render_annotation_type():
 def render_pick_tenant_and_batch():
     annotation_type = render_annotation_type()
     tenants = load_tenants()
-    selected_tenant = st.sidebar.selectbox("Pick Tenant", tenants)
+    selected_tenant = st.sidebar.selectbox("Pick Tenant", tenants, key="selected_tenant")
     batchs = load_batch_names(selected_tenant)
-    selected_batch = st.sidebar.selectbox("Pick Batch", [""] + batchs)
+    selected_batch = st.sidebar.selectbox("Pick Batch", [""] + batchs, key="selected_batch")
     return selected_batch, selected_tenant, annotation_type
 
 

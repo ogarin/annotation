@@ -1,9 +1,11 @@
 import getpass
 import tempfile
+import traceback
 
 from common import ANNOTATION_SCHEME_VERSION, get_annotation_local_path
 
-import databricks_funcs
+import worker_funcs
+import worker_models
 from itertools import groupby
 import streamlit as st
 from pyspark.sql import SparkSession
@@ -18,6 +20,7 @@ import json
 databricks_cli.dbfs.api.error_and_quit = st.error
 databricks_cli.dbfs.api.click.echo = st.info
 
+MODELS_BATCH_SIZE = 20
 DBFS_SHARED_DIR = "dbfs:/FileStore/tables/summarization"
 DATABRICKS_S3_DIR = "s3://usw2-sfdc-ecp-prod-databricks-users"
 SNAPSHOT_DIR = "s3://prod-usw2-datasets/snapshots"
@@ -45,6 +48,9 @@ TENANTS = {
 def get_tenant_temp_dir(tenant_name):
     return f"{DATABRICKS_S3_DIR}/{_get_lct_temp_dir(tenant_name)}/lct_with_case_json"
 
+def get_tenant_batch_temp_path(tenant_name, batch_name):
+    return f"{DATABRICKS_S3_DIR}/{_get_lct_temp_dir(tenant_name)}/{batch_name}.json"
+
 
 def _get_lct_temp_dir(tenant_name):
     tenant_doc = TENANTS[tenant_name]
@@ -66,7 +72,8 @@ def _get_spark():
         spark = SparkSession.builder.appName(
             f"Annotation-Tool-{getpass.getuser()}"
         ).getOrCreate()
-        spark.sparkContext.addPyFile(databricks_funcs.__file__)
+        spark.sparkContext.addPyFile(worker_funcs.__file__)
+        spark.sparkContext.addPyFile(worker_models.__file__)
 
     return spark
 
@@ -80,9 +87,9 @@ def _get_dbutils():
     return DBUtils(_get_spark())
 
 
-def _parallelize(lst):
+def _parallelize(lst, n_partitions=None):
     assert len(lst) > 0
-    return _get_spark_context().parallelize(lst, min(16, len(lst)))
+    return _get_spark_context().parallelize(lst, n_partitions or min(16, len(lst)))
 
 
 def _file_key(dct):
@@ -95,7 +102,7 @@ def load_chats(chat_metadata):
         for file, mds in groupby(sorted(chat_metadata, key=_file_key), key=_file_key)
     ]
 
-    chats = _parallelize(chats_by_file).flatMap(databricks_funcs.read_chats).collect()
+    chats = _parallelize(chats_by_file).flatMap(worker_funcs.read_chats).collect()
 
     if len(chats) < len(chat_metadata):
         st.warning(f"Retrieved {len(chats)}/{len(chat_metadata)} chats")
@@ -123,14 +130,14 @@ def _process_raw_data(tenant_name):
     raw_lct_files = _get_dbutils().fs.ls(TENANTS[tenant_name]["mllake_lct"])
     lct_rdd_by_case_id = (
         _parallelize([f.path for f in raw_lct_files])
-        .flatMap(databricks_funcs.read_raw_lcts)
+        .flatMap(worker_funcs.read_raw_lcts)
         .keyBy(lambda record: record["case_id"])
     )
 
     raw_case_files = _get_dbutils().fs.ls(TENANTS[tenant_name]["mllake_case"])
     case_rdd_by_id = (
         _parallelize([f.path for f in raw_case_files])
-        .flatMap(databricks_funcs.read_raw_cases)
+        .flatMap(worker_funcs.read_raw_cases)
         .keyBy(lambda record: record["Id"])
     )
 
@@ -158,7 +165,7 @@ def load_metadata(tenant_name):
     chat_files = _get_chat_files(tenant_name)
     return (
         _parallelize([f.path for f in chat_files if "part-" in f.path])
-        .flatMap(databricks_funcs.read_chats_metadata)
+        .flatMap(worker_funcs.read_chats_metadata)
         .collect()
     )
 
@@ -227,7 +234,7 @@ def create_batch(tenant_name, batch_name, batch_size, turn_range):
     chat_files = _get_chat_files(tenant_name)
     chat_meta_rdd = (
         _parallelize([f.path for f in chat_files if "part-" in f.path])
-        .flatMap(databricks_funcs.read_chats_metadata)
+        .flatMap(worker_funcs.read_chats_metadata)
         .filter(
             lambda doc: doc["n_turns"] > turn_range[0]
             and doc["n_turns"] < turn_range[1]
@@ -273,3 +280,47 @@ def fetch_annotation(tenant_name, batch_name, annotation_type):
             return json.load(tf)
     except:
         return {}
+
+
+def apply_models(tenant_name, batch_name, batch):
+    chat_uids_and_texts = [
+        (chat["uid"], chat["chat_text"])
+        for chat in batch["chats"]
+    ]
+    n_batches = len(chat_uids_and_texts) // MODELS_BATCH_SIZE
+    model_names = list(worker_models.models.keys())
+    all_model_preds = _parallelize(model_names, len(model_names)).cartesian(
+        _parallelize(chat_uids_and_texts, n_batches)
+    ).mapPartitions(
+        worker_models.run_model_on_partition
+    ).collect()
+
+    chat_by_uid = {chat["uid"]: chat for chat in batch["chats"]}
+    for model_name, model_preds in all_model_preds:
+        for uid, pred in model_preds.items():
+            chat_by_uid[uid].setdefault("preds", {})[model_name] = pred
+
+    save_batch(tenant_name, batch_name, batch)
+    return batch
+
+
+def get_saved_batch(tenant_name, batch_name):
+    try:
+        text = _get_dbutils().fs.head(
+            get_tenant_batch_temp_path(tenant_name, batch_name),
+            2147483647
+        )
+        return json.loads(text)
+    except Exception as e:
+        if "java.io.FileNotFoundException" not in str(e):
+            print(traceback.format_exc())
+
+        return None
+
+
+def save_batch(tenant_name, batch_name, batch):
+    _get_dbutils().fs.put(
+        get_tenant_batch_temp_path(tenant_name, batch_name),
+        json.dumps(batch),
+        True
+    )

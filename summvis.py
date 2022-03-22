@@ -14,6 +14,8 @@ from preprocessing import NGramAlignerCap, StaticEmbeddingAlignerCap, \
 from preprocessing import _spacy_decode, _spacy_encode
 
 import annotation
+import databricks
+from worker_models import models
 
 MIN_SEMANTIC_SIM_THRESHOLD = 0.1
 MAX_SEMANTIC_SIM_TOP_K = 10
@@ -30,15 +32,15 @@ class Instance():
         self.preds = preds
         self.data = data
 
-@st.cache(allow_output_mutation=True)
-def get_models():
-    return OrderedDict([
-        (key, transformers.pipeline("summarization", model=name_or_path, framework="pt"))
-        for key, name_or_path in [
-            ('bart-cnn', "facebook/bart-large-cnn"),
-            ('bart-samsum', "Salesforce/bart-large-xsum-samsum"),
-        ]
-    ])
+# @st.cache(allow_output_mutation=True)
+# def get_models():
+#     return OrderedDict([
+#         (key, transformers.pipeline("summarization", model=name_or_path, framework="pt"))
+#         for key, name_or_path in [
+#             ('bart-cnn', "facebook/bart-large-cnn"),
+#             ('bart-samsum', "Salesforce/bart-large-xsum-samsum"),
+#         ]
+#     ])
 
 @st.cache(allow_output_mutation=True)
 def get_nlp():
@@ -63,12 +65,13 @@ def retrieve(batch, index):
     document = _to_doc(dialogue, "document", "Document")
     reference = None if not gold_summary else _to_doc(gold_summary, "summary:reference", "Reference")
 
-    preds = []
-    for model_name, model in get_models().items():
-        summary = model(dialogue, truncation=True)[0]["summary_text"]
-        preds.append(
-            _to_doc(summary, model_name, model_name)
-        )
+    preds = [
+        _to_doc(data["preds"][model_name], model_name, model_name)
+        for model_name in models.keys()
+        if model_name in data.get("preds", {})
+    ]
+    # for model_name, model in get_models().items():
+    #     summary = model(dialogue, truncation=True)[0]["summary_text"]
 
     return Instance(
         id_=uid,
@@ -252,11 +255,14 @@ if __name__ == "__main__":
 
     selected_batch, selected_tenant = annotation.render_pick_tenant_and_batch()
 
-    sidebar_placeholder_from = st.sidebar.empty()
-    sidebar_placeholder_to = st.sidebar.empty()
-
     if selected_batch:
         batch = annotation.fetch_batch_chats(selected_tenant, selected_batch)
+        if st.sidebar.button("Rerun all models on batch"):
+            with st.spinner("Running models on batch, this will take some time"):
+                databricks.apply_models(selected_tenant, selected_batch, batch)
+
+        sidebar_placeholder_from = st.sidebar.empty()
+        sidebar_placeholder_to = st.sidebar.empty()
 
         dataset_size = len(batch['chats'])
         query = st.number_input(f"Index (Size: {dataset_size}):", value=0, min_value=0,
