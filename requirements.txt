@@ -16,3 +16,6 @@ torchmetrics==0.5.1
 pytorch-lightning==1.4.5
 sentencepiece==0.1.95
 en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.0.0/en_core_web_lg-3.0.0.tar.gz
+
+# encryption
+pycryptodome==3.14.1
