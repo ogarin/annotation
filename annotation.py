@@ -276,6 +276,7 @@ def render_annotation_window(selected_tenant, selected_batch, annotation_type):
 
 
 if __name__ == "__main__":
+    st.set_page_config(layout="wide")
     selected_tenant, selected_batch, annotation_type = render_sidebar()
     if selected_batch:
         load_annotations(selected_tenant, selected_batch, annotation_type)
