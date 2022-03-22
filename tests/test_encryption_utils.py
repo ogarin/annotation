@@ -1,4 +1,4 @@
-from encryption_utils import decrypt_using_sample, encrypt_using_sample
+from encryption_utils import encrypt_by_text_key, decrypt_by_text_key
 import json
 
 def test_encrypt_decrypt():
@@ -11,7 +11,7 @@ def test_encrypt_decrypt():
 
     data = {"Text": "This Data will be encrypted"}
 
-    encryped = encrypt_using_sample(key, json.dumps(data).encode('utf-8'))
-    data_dec = json.loads(decrypt_using_sample(key, encryped).decode('utf-8'))
+    encryped = encrypt_by_text_key(key, json.dumps(data).encode('utf-8'))
+    data_dec = json.loads(decrypt_by_text_key(key, encryped).decode('utf-8'))
 
     assert data['Text'] == data_dec['Text']

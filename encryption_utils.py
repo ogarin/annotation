@@ -1,11 +1,14 @@
+from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 from Crypto import Random
 import json
 import base64
 
-SALT_SIZE = 12
+SALT_SIZE = 16
 
+def generate_encryption_key(big_text, salt):
+    return PBKDF2(big_text, salt, count=1000, hmac_hash_module=SHA256)
 
 def encrypt_by_sample(smp, doc):
     key = dervice_encrpytion_from_sample(smp)
@@ -19,7 +22,7 @@ def decrypt_by_sample(smp, enc_data):
 
 def encrypt_by_text_key(big_key: str, data_to_encrypt: bytes) -> dict:
     salt = Random.new().read(SALT_SIZE)
-    key = SHA256.new((big_key).encode("utf-8") + salt).digest()
+    key = generate_encryption_key(big_key, salt)
     IV = Random.new().read(AES.block_size)
     encryptor = AES.new(key, AES.MODE_CBC, IV)
     padding = (
@@ -40,9 +43,7 @@ def decrypt_by_text_key(big_key: str, encrypted_data: bytes):
     salt = source[
         AES.block_size : AES.block_size + SALT_SIZE
     ]  # extract the IV from the beginning
-    key = SHA256.new(
-        (big_key).encode("utf-8") + salt
-    ).digest()  # use SHA-256 over our key to get a proper-sized AES key
+    key = generate_encryption_key(big_key, salt)
     decryptor = AES.new(key, AES.MODE_CBC, IV)
     data = decryptor.decrypt(source[(AES.block_size + SALT_SIZE) :])  # decrypt
     padding = data[-1]  # pick the padding value from the end; Python 2.x: ord(data[-1])
