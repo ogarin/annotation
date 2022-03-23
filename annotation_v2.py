@@ -15,7 +15,7 @@ from databricks import (
     load_batch_names,
     load_tenants,
     create_batch,
-    get_tenant_temp_dir,
+    get_tenant_temp_data_dir,
     fetch_batch_meta,
     upload_annotation,
     fetch_annotation,

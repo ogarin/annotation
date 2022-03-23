@@ -1,21 +1,7 @@
 from collections import OrderedDict
 import transformers
-import os
 
-def _download_from_dbfs(model_name_or_path):
-    model_name_or_path = (
-        model_name_or_path[:-1]
-        if model_name_or_path.endswith("/")
-        else model_name_or_path
-    )
-    model_short_name = model_name_or_path.split("/")[-1]
-    local_path = f"/databricks/driver/{model_short_name}"
-    if not os.path.exists(f"{local_path}/config.json"):
-        print(f"Copying model from {model_name_or_path} to file:{local_path}")
-        dbutils.fs.cp(model_name_or_path, f"file:{local_path}", recurse=True)
-
-    return local_path
-
+DBFS_PATH = "dbfs:/FileStore/tables/summarization"
 
 class Summarizer:
     def __init__(self, model_name_or_path):
@@ -29,14 +15,9 @@ class Summarizer:
         ]
 
     def _init_model(self):
-        local_path = (
-            _download_from_dbfs(self.model_name_or_path)
-            if self.model_name_or_path.startswith("dbfs:/")
-            else self.model_name_or_path
-        )
         self.model = transformers.pipeline(
             "summarization",
-            model=local_path,
+            model=self.model_name_or_path,
             framework="pt"
         )
 
@@ -45,7 +26,7 @@ class Summarizer:
 
 
 class SplitSummarizer(Summarizer):
-    def __init__(self, model_name_or_path, n_splits=2, min_sents_per_split=5):
+    def __init__(self, model_name_or_path, n_splits, min_sents_per_split=5):
         super().__init__(model_name_or_path)
         self.n_splits = n_splits
         self.min_sents_per_split = min_sents_per_split
@@ -61,8 +42,28 @@ class SplitSummarizer(Summarizer):
         return "\n".join(res)
 
 
+def _infer_model_path(model_name_or_path, temp_s3_bucket):
+    if not model_name_or_path.startswith("dbfs:"):
+        return model_name_or_path
 
-def run_model_on_partition(partition):
+    s3_path = model_name_or_path.replace(DBFS_PATH, temp_s3_bucket)
+    assert s3_path != model_name_or_path, f"Models should be stored in subdirs under {DBFS_PATH}"
+    return s3_path
+
+def _infer_model_path_and_download(model_name_or_path, temp_s3_bucket):
+    s3_path = _infer_model_path(model_name_or_path, temp_s3_bucket)
+    if s3_path == model_name_or_path:
+        return model_name_or_path
+
+    import fsspec
+    import os
+    local_file = "/databricks/driver/models/" + s3_path.split("/")[-1]
+    if not os.path.exists(local_file):
+        fs, _, _ = fsspec.get_fs_token_paths(s3_path)
+        fs.get(s3_path, local_file, recursive=True)
+    return local_file
+
+def run_model_on_partition(partition, temp_s3_bucket):
     model_names = set()
     uids = []
     texts = []
@@ -74,6 +75,7 @@ def run_model_on_partition(partition):
 
     model_name = list(model_names)[0]
     model = models[model_name]
+    model.model_name_or_path = _infer_model_path_and_download(model.model_name_or_path, temp_s3_bucket)
     print(f"Running model '{model_name}' on {len(texts)} texts")
     preds = model(texts)
     return [(model_name, dict(zip(uids, preds)))]
@@ -81,6 +83,7 @@ def run_model_on_partition(partition):
 
 models = OrderedDict([
     ("BART xsum-samsum", Summarizer("Salesforce/bart-large-xsum-samsum")),
+    ("BART dialogsum", Summarizer(f"{DBFS_PATH}/models/bart-dialogsum")),
+    ("BART dialogsum 2 parts", SplitSummarizer(f"{DBFS_PATH}/models/bart-dialogsum", 2)),
     ("BART cnn/dm", Summarizer("facebook/bart-large-cnn")),
-    # ("BART dialogsum", Summarizer("dbfs:/FileStore/tables/summarization/models/bart-dialogsum")),
 ])

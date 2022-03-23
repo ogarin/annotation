@@ -16,7 +16,7 @@ To use,
   "port": "15001"
 }
 ```
-We're currently using Erez's spark cluster which has Wiley data access, "0216-080021-basin0000660" 
+We're currently using Erez's spark cluster which has Wiley data access, "0303-102113-today000054" 
 
 Run the app and visit http://localhost:8501
 

@@ -46,12 +46,18 @@ TENANTS = {
 
 
 def get_tenant_temp_dir(tenant_name):
-    return f"{DATABRICKS_S3_DIR}/{_get_lct_temp_dir(tenant_name)}/lct_with_case_json"
+    return f"{DATABRICKS_S3_DIR}/{_get_lct_temp_dir(tenant_name)}"
+
+
+def get_tenant_temp_data_dir(tenant_name):
+    return f"{get_tenant_temp_dir(tenant_name)}/lct_with_case_json"
+
 
 def get_tenant_batch_temp_path(tenant_name, batch_name):
-    return f"{DATABRICKS_S3_DIR}/{_get_lct_temp_dir(tenant_name)}/{batch_name}.json"
+    return f"{get_tenant_temp_dir(tenant_name)}/{batch_name}.json"
 
 
+@st.cache
 def _get_lct_temp_dir(tenant_name):
     tenant_doc = TENANTS[tenant_name]
     curdate = datetime.datetime.utcnow().strftime("%Y%m%d")
@@ -126,7 +132,7 @@ def _safe_ls(path):
 
 
 def _process_raw_data(tenant_name):
-    chat_temp_dir = get_tenant_temp_dir(tenant_name)
+    chat_temp_dir = get_tenant_temp_data_dir(tenant_name)
     raw_lct_files = _get_dbutils().fs.ls(TENANTS[tenant_name]["mllake_lct"])
     lct_rdd_by_case_id = (
         _parallelize([f.path for f in raw_lct_files])
@@ -153,7 +159,7 @@ def _process_raw_data(tenant_name):
 
 
 def _get_chat_files(tenant_name):
-    chat_temp_dir = get_tenant_temp_dir(tenant_name)
+    chat_temp_dir = get_tenant_temp_data_dir(tenant_name)
     chat_files = _safe_ls(chat_temp_dir)
     if chat_files is None:
         _process_raw_data(tenant_name)
@@ -282,17 +288,33 @@ def fetch_annotation(tenant_name, batch_name, annotation_type):
         return {}
 
 
-def apply_models(tenant_name, batch_name, batch):
+def _assert_models_are_available(temp_s3_bucket):
+    for model in worker_models.models.values():
+        dbfs_path = model.model_name_or_path
+        s3_path = worker_models._infer_model_path(dbfs_path, temp_s3_bucket)
+        print(f"{dbfs_path} -> {s3_path}")
+        if dbfs_path == s3_path:
+            continue
+
+        target_files = _safe_ls(s3_path)
+        if not target_files:
+            return st.error(
+                f"Model not available on temp s3 bucket. Please run on  Databricks notebook: "
+                f"dbutils.fs.cp('{dbfs_path}', '{s3_path}', recurse=True)")
+
+
+def apply_models(tenant_name, batch_name, batch, model_names):
     chat_uids_and_texts = [
         (chat["uid"], chat["chat_text"])
         for chat in batch["chats"]
     ]
     n_batches = len(chat_uids_and_texts) // MODELS_BATCH_SIZE
-    model_names = list(worker_models.models.keys())
+    temp_s3_bucket = get_tenant_temp_dir(tenant_name)
+    _assert_models_are_available(temp_s3_bucket)
     all_model_preds = _parallelize(model_names, len(model_names)).cartesian(
         _parallelize(chat_uids_and_texts, n_batches)
     ).mapPartitions(
-        worker_models.run_model_on_partition
+        lambda partition: worker_models.run_model_on_partition(partition, temp_s3_bucket)
     ).collect()
 
     chat_by_uid = {chat["uid"]: chat for chat in batch["chats"]}

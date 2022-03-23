@@ -10,7 +10,7 @@ from databricks import (
     load_batch_names,
     load_tenants,
     create_batch,
-    get_tenant_temp_dir,
+    get_tenant_temp_data_dir,
     fetch_batch_meta,
     upload_annotation,
     fetch_annotation,
@@ -33,7 +33,7 @@ def get_metadata(tenant_name):
     if os.path.exists(metadata_path):
         chat_metadata_df = pd.read_csv(metadata_path)
         if chat_metadata_df.loc[0, "chat_file"].startswith(
-            get_tenant_temp_dir(tenant_name)
+            get_tenant_temp_data_dir(tenant_name)
         ):
             return chat_metadata_df
 
@@ -61,14 +61,15 @@ def fetch_batch_chats(tenant_name, batch_name):
     if batch:
         return batch
 
-    metadata = get_metadata(tenant_name)
-    chats_md = metadata.to_dict("records")
-    batch_meta = fetch_batch_meta(tenant_name, batch_name)
-    chats_md_filterd = [
-        chat for chat in chats_md if chat["uid"] in batch_meta["chat_uids"]
-    ]
-    batch = {"chats": load_chats(chats_md_filterd), "batch_meta": batch_meta}
-    save_batch(tenant_name, batch_name, batch)
+    with st.spinner("Extracting batch chats, please wait..."):
+        metadata = get_metadata(tenant_name)
+        chats_md = metadata.to_dict("records")
+        batch_meta = fetch_batch_meta(tenant_name, batch_name)
+        chats_md_filterd = [
+            chat for chat in chats_md if chat["uid"] in batch_meta["chat_uids"]
+        ]
+        batch = {"chats": load_chats(chats_md_filterd), "batch_meta": batch_meta}
+        save_batch(tenant_name, batch_name, batch)
 
     return batch
 
@@ -227,17 +228,21 @@ def render_annotation_type():
     return st.sidebar.selectbox("Annotation Types", ["Segments", "Free Text"])
 
 
-def render_pick_tenant_and_batch():
+def render_pick_tenant_batch_and_annotation_type():
     annotation_type = render_annotation_type()
+    selected_batch, selected_tenant = render_pick_tenant_and_batch()
+    return selected_batch, selected_tenant, annotation_type
+
+def render_pick_tenant_and_batch():
     tenants = load_tenants()
     selected_tenant = st.sidebar.selectbox("Pick Tenant", tenants, key="selected_tenant")
     batchs = load_batch_names(selected_tenant)
     selected_batch = st.sidebar.selectbox("Pick Batch", [""] + batchs, key="selected_batch")
-    return selected_batch, selected_tenant, annotation_type
+    return selected_batch, selected_tenant
 
 
 def render_sidebar():
-    selected_batch, selected_tenant, annotation_type = render_pick_tenant_and_batch()
+    selected_batch, selected_tenant, annotation_type = render_pick_tenant_batch_and_annotation_type()
     with st.sidebar.expander("Create New Batch"):
         render_create_new_batch(selected_tenant)
 

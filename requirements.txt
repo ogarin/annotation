@@ -2,7 +2,9 @@ streamlit==1.0.0
 databricks-connect==9.1.* # must match databricks cluster runtime version
 databricks_cli==0.16.4
 pandas==1.4.0
+watchdog
 
+# summvis
 spacy==3.0.3
 st-annotated-text==1.1.0
 transformers==4.2.2

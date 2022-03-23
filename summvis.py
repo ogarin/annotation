@@ -4,8 +4,6 @@ import streamlit as st
 import spacy
 from spacy.tokens import Doc
 from robustnessgym import Identifier, Spacy
-import transformers
-from collections import OrderedDict
 
 from align import NGramAligner, BertscoreAligner, StaticEmbeddingAligner
 from components import MainView
@@ -242,6 +240,21 @@ def show_main(example):
         gray_out_stopwords,
     ).show(height=720)
 
+def _check_model_preds_exist(selected_tenant, selected_batch, batch):
+    preds = batch["chats"][0].get("preds") or {}
+    models_to_run = [
+        model_name
+        for model_name in models.keys()
+        if model_name not in preds
+    ]
+    if models_to_run:
+        _apply_models(batch, selected_batch, selected_tenant, models_to_run)
+
+
+def _apply_models(batch, selected_batch, selected_tenant, models_to_run):
+    with st.spinner("Running models on batch, this will take some time"):
+        databricks.apply_models(selected_tenant, selected_batch, batch, models_to_run)
+
 
 if __name__ == "__main__":
 
@@ -257,9 +270,9 @@ if __name__ == "__main__":
 
     if selected_batch:
         batch = annotation.fetch_batch_chats(selected_tenant, selected_batch)
+        _check_model_preds_exist(selected_tenant, selected_batch, batch)
         if st.sidebar.button("Rerun all models on batch"):
-            with st.spinner("Running models on batch, this will take some time"):
-                databricks.apply_models(selected_tenant, selected_batch, batch)
+            _apply_models(selected_tenant, selected_batch, batch, models.keys())
 
         sidebar_placeholder_from = st.sidebar.empty()
         sidebar_placeholder_to = st.sidebar.empty()
