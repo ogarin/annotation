@@ -52,7 +52,7 @@ def _infer_model_path(model_name_or_path, temp_s3_bucket):
 
 def _infer_model_path_and_download(model_name_or_path, temp_s3_bucket):
     s3_path = _infer_model_path(model_name_or_path, temp_s3_bucket)
-    if s3_path == model_name_or_path:
+    if not s3_path.startswith("s3:/"):
         return model_name_or_path
 
     import fsspec
@@ -85,5 +85,8 @@ models = OrderedDict([
     ("BART xsum-samsum", Summarizer("Salesforce/bart-large-xsum-samsum")),
     ("BART dialogsum", Summarizer(f"{DBFS_PATH}/models/bart-dialogsum")),
     ("BART dialogsum 2 parts", SplitSummarizer(f"{DBFS_PATH}/models/bart-dialogsum", 2)),
+    ("BART wiley-100", Summarizer("s3://usw2-sfdc-ecp-prod-databricks-users/databricks_2051_ai-prod-00Dd0000000eekuEAA/20220304_20220403/models/bart_dialogsum-finetuned-wiley-18952-issue-resolution/checkpoint-7104")),
+    ("BART wiley-1000", Summarizer("s3://usw2-sfdc-ecp-prod-databricks-users/databricks_2051_ai-prod-00Dd0000000eekuEAA/20220304_20220403/models/bart_dialogsum-finetuned-wiley-1000-issue-resolution/checkpoint-186")),
+    ("BART wiley-18952", Summarizer("s3://usw2-sfdc-ecp-prod-databricks-users/databricks_2051_ai-prod-00Dd0000000eekuEAA/20220304_20220403/models/bart_dialogsum-finetuned-wiley-100-issue-resolution/checkpoint-36")),
     ("BART cnn/dm", Summarizer("facebook/bart-large-cnn")),
 ])
