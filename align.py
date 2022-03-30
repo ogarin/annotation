@@ -110,16 +110,12 @@ class EmbeddingAligner():
         chunked_sents_token_embeddings = _split(all_sents_token_embeddings, chunk_sizes)
         source_sent_token_embeddings = chunked_sents_token_embeddings[0]
         source_token_embeddings = np.concatenate(source_sent_token_embeddings)
-        for token_idx, token in enumerate(source):
-            if token.is_stop or token.is_punct:
-                source_token_embeddings[token_idx] = 0
+        self._process_embs(source, source_token_embeddings)
         alignments = []
         for i, target in enumerate(targets):
             target_sent_token_embeddings = chunked_sents_token_embeddings[i + 1]
             target_token_embeddings = np.concatenate(target_sent_token_embeddings)
-            for token_idx, token in enumerate(target):
-                if token.is_stop or token.is_punct:
-                    target_token_embeddings[token_idx] = 0
+            self._process_embs(target, target_token_embeddings)
             alignment = defaultdict(list)
             for score, target_idx, source_idx in self._emb_sim_sparse(
                 target_token_embeddings,
@@ -131,6 +127,19 @@ class EmbeddingAligner():
                 alignment[j] = heapq.nlargest(self.top_k, alignment[j], itemgetter(1))
             alignments.append(alignment)
         return alignments
+
+    def _process_embs(self, doc, embeddings):
+        for sent in doc.sents:
+            tokens = []
+            for token in sent:
+                if len(tokens) < 5 and token.text == ':':
+                    for tok in tokens:
+                        embeddings[tok.i] = 0
+                if token.is_stop or token.is_punct or token.is_space:
+                    embeddings[token.i] = 0
+                else:
+                    tokens.append(token)
+
 
     def _emb_sim_sparse(self, embs_1, embs_2):
         sim = embs_1 @ embs_2.T
@@ -149,7 +158,7 @@ class BertscoreAligner(EmbeddingAligner):
     ):
         scorer = BERTScorer(lang="en", rescale_with_baseline=True)
         model = scorer._model
-        embedding = ContextualEmbedding(model, "roberta-large", 510)
+        embedding = ContextualEmbedding(model, "distilroberta-base", 510)
         baseline_val = scorer.baseline_vals[2].item()
 
         super(BertscoreAligner, self).__init__(
@@ -195,9 +204,16 @@ class NGramAligner():
     ):
         ngrams = []
         for sent in doc.sents:
-            for n in range(1, len(list(sent))):
-                tokens = [t for t in sent if not (t.is_stop or t.is_punct)]
-                ngrams.extend(_ngrams(tokens, n))
+            start_idx = 0
+            tokens = []
+            for idx, token, in enumerate(sent):
+                if not start_idx and len(tokens) < 5 and token.text == ':':
+                    start_idx = len(tokens)
+                if not (token.is_stop or token.is_punct or token.is_space):
+                    tokens.append(token)
+            len(tokens)
+            for n in range(1, len(list(sent)) + 1):
+                ngrams.extend(_ngrams(tokens, n, start_idx))
 
         def ngram_key(ngram):
             return tuple(self.stemmer.stem(token.text).lower() for token in ngram)
@@ -343,6 +359,6 @@ def _iter_len(it):
     # To get top K axis and value per row: https://stackoverflow.com/questions/42832711/using-np-argpartition-to-index-values-in-a-multidimensional-array
 
 
-def _ngrams(tokens, n):
-    for i in range(len(tokens) - n + 1):
+def _ngrams(tokens, n, start_idx):
+    for i in range(start_idx, len(tokens) - n + 1):
         yield tokens[i:i + n]

@@ -1,5 +1,6 @@
 import operator
 
+import re
 import streamlit as st
 import spacy
 from spacy.tokens import Doc
@@ -45,7 +46,16 @@ def get_nlp():
     return spacy.load("en_core_web_lg")
 
 def _to_doc(text, column, name):
+    if column == "document":
+        # make sure spacy will treat different lines as different sentences
+        text = re.sub("(?<=\w)\s*\n\s*", ".\n", text)
     document = nlp(text)
+    if column != "document":
+        # add newlines to summary sentences
+        document = nlp("\n".join(
+            sent.text
+            for sent in document.sents
+        ))
     document._.column = column
     document._.name = name
     return document
@@ -285,3 +295,4 @@ if __name__ == "__main__":
             example = retrieve(batch, query)
             if example:
                 show_main(example)
+

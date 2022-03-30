@@ -493,7 +493,7 @@ class MultiUnderline:
                             if not spans:  # If slot is free, take it
                                 spans.append(new_span)
                                 break
-            if token in ("\n", "\r", "\r\n"):
+            if "\n" in str(token):
                 elements.append(br())
                 first_token_in_line = True
             else:
