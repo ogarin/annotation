@@ -161,16 +161,18 @@ def _process_raw_data(tenant_name):
 def _get_chat_files(tenant_name):
     chat_temp_dir = get_tenant_temp_data_dir(tenant_name)
     chat_files = _safe_ls(chat_temp_dir)
-    if chat_files is None:
+    if not chat_files:
         _process_raw_data(tenant_name)
         chat_files = _safe_ls(chat_temp_dir)
-    return chat_files
+    res = [f.path for f in chat_files if "part-" in f.path]
+    assert res, f"No chat files found in dir {chat_temp_dir}, but dir isn't empty!"
+    return res
 
 
 def load_metadata(tenant_name):
     chat_files = _get_chat_files(tenant_name)
     return (
-        _parallelize([f.path for f in chat_files if "part-" in f.path])
+        _parallelize(chat_files)
         .flatMap(worker_funcs.read_chats_metadata)
         .collect()
     )
@@ -239,7 +241,7 @@ def load_batch_names(tenant_name):
 def create_batch(tenant_name, batch_name, batch_size, turn_range):
     chat_files = _get_chat_files(tenant_name)
     chat_meta_rdd = (
-        _parallelize([f.path for f in chat_files if "part-" in f.path])
+        _parallelize(chat_files)
         .flatMap(worker_funcs.read_chats_metadata)
         .filter(
             lambda doc: doc["n_turns"] > turn_range[0]
