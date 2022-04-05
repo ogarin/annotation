@@ -22,6 +22,11 @@ MAX_SEMANTIC_SIM_TOP_K = 10
 Doc.set_extension("name", default=None, force=True)
 Doc.set_extension("column", default=None, force=True)
 
+from rouge_score.rouge_scorer import RougeScorer
+rouge_types = ["rouge1"]#, "rouge2", "rougeL", "rougeLsum"]
+rouge_scorer = RougeScorer(rouge_types=rouge_types, use_stemmer=True)
+def get_rouge_score(pred, ref):
+    return rouge_scorer.score(pred, ref)['rouge1'].fmeasure
 
 class Instance():
     def __init__(self, id_, document, reference, preds, data=None):
@@ -74,7 +79,11 @@ def retrieve(batch, index):
     reference = None if not gold_summary else _to_doc(gold_summary, "summary:reference", "Reference")
 
     preds = [
-        _to_doc(data["preds"][model_name], model_name, model_name)
+        _to_doc(
+            data["preds"][model_name],
+            model_name,
+            model_name + f" (rouge1={get_rouge_score(data['preds'][model_name], gold_summary):.4f})"
+        )
         for model_name in models.keys()
         if model_name in data.get("preds", {})
     ]
@@ -128,7 +137,8 @@ def select_comparison(example):
     selected_summary_names = sidebar_placeholder_to.multiselect(
         'Comparison TO:',
         remaining_summary_names,
-        remaining_summary_names
+        remaining_summary_names,
+        format_func=lambda s: s.split(" (")[0]
     )
     selected_summaries = []
     for summary_name in selected_summary_names:
