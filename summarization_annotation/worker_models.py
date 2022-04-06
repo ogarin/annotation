@@ -87,5 +87,6 @@ models = OrderedDict([
     ("BART dialogsum 2 parts", SplitSummarizer(f"{DBFS_PATH}/models/bart-dialogsum", 2)),
     ("BART wiley-100", Summarizer("s3://usw2-sfdc-ecp-prod-databricks-users/databricks_2051_ai-prod-00Dd0000000eekuEAA/20220403_20220503/models/bart_dialogsum-finetuned-wiley-100-issue-resolution/checkpoint-54")),
     ("BART wiley-full", Summarizer("s3://usw2-sfdc-ecp-prod-databricks-users/databricks_2051_ai-prod-00Dd0000000eekuEAA/20220403_20220503/models/bart_dialogsum-finetuned-wiley-18525-issue-resolution/checkpoint-5785")),
+    ("BART wiley-erez", Summarizer("s3://usw2-sfdc-ecp-prod-databricks-users/databricks_2051_ai-prod-00Dd0000000eekuEAA/20220403_20220503/models/bart_dialogsum-finetuned-wiley-18525-issue-resolution-erez/checkpoint-6942")),
     ("BART cnn/dm", Summarizer("facebook/bart-large-cnn")),
 ])

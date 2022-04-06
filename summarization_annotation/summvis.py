@@ -21,6 +21,7 @@ MAX_SEMANTIC_SIM_TOP_K = 10
 
 Doc.set_extension("name", default=None, force=True)
 Doc.set_extension("column", default=None, force=True)
+Doc.set_extension("score", default=None, force=True)
 
 from rouge_score.rouge_scorer import RougeScorer
 rouge_types = ["rouge1"]#, "rouge2", "rougeL", "rougeLsum"]
@@ -50,7 +51,7 @@ class Instance():
 def get_nlp():
     return spacy.load("en_core_web_lg")
 
-def _to_doc(text, column, name):
+def _to_doc(text, column, name, score=None):
     if column == "document":
         # make sure spacy will treat different lines as different sentences
         text = re.sub("(?<=\w)\s*\n\s*", ".\n", text)
@@ -63,6 +64,7 @@ def _to_doc(text, column, name):
         ))
     document._.column = column
     document._.name = name
+    document._.score = score
     return document
 
 def retrieve(batch, index):
@@ -82,7 +84,8 @@ def retrieve(batch, index):
         _to_doc(
             data["preds"][model_name],
             model_name,
-            model_name + f" (rouge1={get_rouge_score(data['preds'][model_name], gold_summary):.4f})"
+            model_name,
+            get_rouge_score(data['preds'][model_name], gold_summary)
         )
         for model_name in models.keys()
         if model_name in data.get("preds", {})
@@ -138,7 +141,6 @@ def select_comparison(example):
         'Comparison TO:',
         remaining_summary_names,
         remaining_summary_names,
-        format_func=lambda s: s.split(" (")[0]
     )
     selected_summaries = []
     for summary_name in selected_summary_names:
@@ -304,5 +306,6 @@ if __name__ == "__main__":
         if query is not None:
             example = retrieve(batch, query)
             if example:
+                st.text(example.id)
                 show_main(example)
 

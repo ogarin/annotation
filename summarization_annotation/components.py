@@ -312,7 +312,7 @@ class MainView(Component):
                 div(
                     **{"class": ' '.join(classes), "data-index": summary_idx}
                 )(
-                    div(_class="name")(summary._.name),
+                    div(_class="name")(summary._.name + f' (rouge: {summary._.score if summary._.score is not None else 0:.4f})'),
                     div(_class="content")(token_elements)
                 )
             )
