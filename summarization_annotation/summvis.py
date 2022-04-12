@@ -4,13 +4,9 @@ import re
 import streamlit as st
 import spacy
 from spacy.tokens import Doc
-from robustnessgym import Identifier, Spacy
 
 from align import NGramAligner, BertscoreAligner, StaticEmbeddingAligner
 from components import MainView
-from preprocessing import NGramAlignerCap, StaticEmbeddingAlignerCap, \
-    BertscoreAlignerCap
-from preprocessing import _spacy_decode, _spacy_encode
 
 import annotation
 import databricks
@@ -36,16 +32,6 @@ class Instance():
         self.reference = reference
         self.preds = preds
         self.data = data
-
-# @st.cache(allow_output_mutation=True)
-# def get_models():
-#     return OrderedDict([
-#         (key, transformers.pipeline("summarization", model=name_or_path, framework="pt"))
-#         for key, name_or_path in [
-#             ('bart-cnn', "facebook/bart-large-cnn"),
-#             ('bart-samsum', "Salesforce/bart-large-xsum-samsum"),
-#         ]
-#     ])
 
 @st.cache(allow_output_mutation=True)
 def get_nlp():
@@ -176,82 +162,25 @@ def show_main(example):
     scroll = True
     gray_out_stopwords = st.sidebar.checkbox(label="Gray out stopwords", value=True)
 
-    # Gather data
-    try:
-        lexical_alignments = [
-            NGramAlignerCap.decode(
-                example.data[
-                    Identifier(NGramAlignerCap.__name__)(
-                        columns=[
-                            f'preprocessed_{document._.column}',
-                            f'preprocessed_{summary._.column}',
-                        ]
-                    )
-                ])[0]
-            for summary in summaries
-        ]
-        lexical_alignments = [
-            {k: [(pair[0], int(pair[1])) for pair in v]
-             for k, v in d.items()}
-            for d in lexical_alignments
-        ]
-    except KeyError:
-        lexical_alignments = NGramAligner().align(document, summaries)
+    lexical_alignments = NGramAligner().align(document, summaries)
 
     if semantic_sim_type == "Static embedding":
-        try:
-            semantic_alignments = [
-                StaticEmbeddingAlignerCap.decode(
-                    example.data[
-                        Identifier(StaticEmbeddingAlignerCap.__name__)(
-                            threshold=MIN_SEMANTIC_SIM_THRESHOLD,
-                            top_k=MAX_SEMANTIC_SIM_TOP_K,
-                            columns=[
-                                f'preprocessed_{document._.column}',
-                                f'preprocessed_{summary._.column}',
-                            ]
-                        )
-                    ])[0]
-                for summary in summaries
-            ]
-        except KeyError:
-            semantic_alignments = StaticEmbeddingAligner(
-                semantic_sim_threshold,
-                semantic_sim_top_k).align(
-                document,
-                summaries
-            )
-        else:
-            semantic_alignments = [
-                filter_alignment(alignment, semantic_sim_threshold, semantic_sim_top_k)
-                for alignment in semantic_alignments
-            ]
+        semantic_alignments = StaticEmbeddingAligner(
+            semantic_sim_threshold,
+            semantic_sim_top_k
+        ).align(
+            document,
+            summaries
+        )
     else:
-        try:
-            semantic_alignments = [
-                BertscoreAlignerCap.decode(
-                    example.data[
-                        Identifier(BertscoreAlignerCap.__name__)(
-                            threshold=MIN_SEMANTIC_SIM_THRESHOLD,
-                            top_k=MAX_SEMANTIC_SIM_TOP_K,
-                            columns=[
-                                f'preprocessed_{document._.column}',
-                                f'preprocessed_{summary._.column}',
-                            ]
-                        )
-                    ])[0]
-                for summary in summaries
-            ]
-        except KeyError:
-            semantic_alignments = BertscoreAligner(semantic_sim_threshold,
-                                                   semantic_sim_top_k).align(document,
-                                                                             summaries)
-        else:
-            semantic_alignments = [
-                filter_alignment(alignment, semantic_sim_threshold, semantic_sim_top_k)
-                for alignment in semantic_alignments
-            ]
-    
+        semantic_alignments = BertscoreAligner(
+            semantic_sim_threshold,
+            semantic_sim_top_k
+        ).align(
+            document,
+            summaries
+        )
+
     MainView(
         document,
         summaries,
@@ -283,10 +212,6 @@ if __name__ == "__main__":
     st.set_page_config(layout="wide")
 
     nlp = get_nlp()
-
-    Spacy.encode = _spacy_encode
-    Spacy.decode = _spacy_decode
-    rg_spacy = Spacy(nlp=nlp)
 
     selected_batch, selected_tenant = annotation.render_pick_tenant_and_batch()
 

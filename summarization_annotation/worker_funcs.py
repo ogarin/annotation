@@ -13,12 +13,14 @@ def read_raw_lcts(lct_file):
         {
             "turns": [
                 {
-                    "speaker_name": ce.speaker_name,
-                    "speaker_role": ce.speaker_role,
-                    "content": ce.content,
+                    "speaker_name": turn.speaker_name,
+                    "speaker_role": turn.speaker_role,
+                    "content": turn.content,
+                    "is_bot_chat": is_live_chat == 0
                 }
-                for ce in lct.livechat
-                if ce.piece_label == "utterance"
+                for is_live_chat, turns in enumerate([lct.bot, lct.livechat])
+                for turn in turns
+                if turn.piece_label == "utterance"
             ],
             "uid": lct.uid,
             **case_additional_fields[lct.uid]
@@ -39,6 +41,7 @@ def _read_processed_chat_file(chat_file):
                 chat_text="\n".join(
                     "%s: %s" % (turn["speaker_name"], turn["content"])
                     for turn in chat["turns"]
+                    if not turn["is_bot_chat"] or turn["speaker_role"] == "Customer"
                 ),
             )
 
