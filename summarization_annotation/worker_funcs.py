@@ -5,14 +5,9 @@ def read_raw_cases(case_file):
 def read_raw_lcts(lct_file):
     from crm_parser.entities import livechattranscript as lct_parser
 
-    # hack to make parse_avro_chats return CaseId as well as Id
-    def remove_bad_chat_override(chat_record, metrics_component):
-        chat_record["Id"] = (chat_record["Id"], chat_record.get("CaseId"))
-        return lct_parser.remove_bad_chat_orig(chat_record, metrics_component)
-
-    if not hasattr(lct_parser, "remove_bad_chat_orig"):
-        lct_parser.remove_bad_chat_orig = lct_parser.remove_bad_chat
-        lct_parser.remove_bad_chat = remove_bad_chat_override
+    case_additional_fields = {}
+    for record in normalize.yield_avro_records(lct_file.path):
+        case_additional_fields[record['Id']] = {'case_id': record['CaseId'], 'owner_id': record['OwnerId']}
 
     return [
         {
@@ -25,8 +20,8 @@ def read_raw_lcts(lct_file):
                 for ce in lct.livechat
                 if ce.piece_label == "utterance"
             ],
-            "uid": lct.uid[0],
-            "case_id": lct.uid[1],
+            "uid": lct.uid,
+            **case_additional_fields[lct.uid]
         }
         for lct in lct_parser.parse_avro_chats(lct_file)
     ]
