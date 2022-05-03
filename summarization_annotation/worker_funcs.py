@@ -3,6 +3,7 @@ def read_raw_cases(case_file):
     return list(normalize.yield_avro_records(case_file))
 
 def read_raw_lcts(lct_file):
+    from crm_parser import normalize
     from crm_parser.entities import livechattranscript as lct_parser
 
     case_additional_fields = {}
