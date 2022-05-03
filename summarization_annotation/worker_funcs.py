@@ -7,7 +7,7 @@ def read_raw_lcts(lct_file):
     from crm_parser.entities import livechattranscript as lct_parser
 
     case_additional_fields = {}
-    for record in normalize.yield_avro_records(lct_file.path):
+    for record in normalize.yield_avro_records(lct_file):
         case_additional_fields[record['Id']] = {'case_id': record['CaseId'], 'owner_id': record['OwnerId']}
 
     return [
